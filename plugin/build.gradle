@@ -1,0 +1,68 @@
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.protobuf)
+}
+
+android {
+    namespace 'com.devappsys.logs_grpc'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    sourceSets {
+        maybeCreate("main").java.srcDirs += "build/generated/source/proto/main/java"
+    }
+}
+
+dependencies {
+
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+
+    // ✅ gRPC + Protobuf
+    implementation libs.grpc.okhttp
+    implementation libs.grpc.protobuf
+    implementation libs.grpc.stub
+    implementation libs.protobuf.java
+}
+
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.25.3"
+    }
+
+    plugins {
+        register("grpc") {
+            artifact = "io.grpc:protoc-gen-grpc-java:1.69.0"
+        }
+    }
+
+    generateProtoTasks {
+        all().configureEach {
+            plugins {
+                register("grpc")
+            }
+            builtins {
+                register("java")
+            }
+        }
+    }
+}

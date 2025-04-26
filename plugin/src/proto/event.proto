@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package com.devappsys.log;
+import "google/protobuf/timestamp.proto";
+import "context.proto";
+
+
+service EventService {
+  rpc SendEvent (EventMessage) returns (Response);
+  rpc SendEventList (EventList) returns (Response);
+}
+
+message EventList {
+  repeated EventMessage events = 1;
+}
+
+
+message EventMessage {
+  string eventID = 1;
+
+  string eventName = 3;
+  string screenName = 4;
+
+  google.protobuf.Timestamp eventTime = 5;
+
+  bool appOpened = 6;
+  bool appBackgrounded = 7;
+  bool sessionStarted = 8;
+  bool sessionEnded = 9;
+
+  double latitude = 10;
+  double longitude = 11;
+  string city = 12;
+  string region = 13;
+  string country = 14;
+  string carrier = 15;
+
+  bool dynamicConfigChanged = 16;
+
+  map<string, string> customAttributes = 17;
+}
