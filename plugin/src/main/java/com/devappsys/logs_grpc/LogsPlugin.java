@@ -125,42 +125,49 @@ public class LogsPlugin {
         public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
             // Handle activity creation
             System.out.println("Activity Created: " + activity.getLocalClassName());
+            log("Activity Created: " + activity.getLocalClassName());
         }
 
         @Override
         public void onActivityStarted(Activity activity) {
             // Handle activity started
             System.out.println("Activity Started: " + activity.getLocalClassName());
+            log("Activity Started: " + activity.getLocalClassName());
         }
 
         @Override
         public void onActivityResumed(Activity activity) {
             // Handle activity resumed
             System.out.println("Activity Resumed: " + activity.getLocalClassName());
+            log("Activity Resumed: " + activity.getLocalClassName());
         }
 
         @Override
         public void onActivityPaused(Activity activity) {
             // Handle activity paused
             System.out.println("Activity Paused: " + activity.getLocalClassName());
+            log("Activity Paused: " + activity.getLocalClassName());
         }
 
         @Override
         public void onActivityStopped(Activity activity) {
             // Handle activity stopped
             System.out.println("Activity Stopped: " + activity.getLocalClassName());
+            log("Activity Stopped: " + activity.getLocalClassName());
         }
 
         @Override
         public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
             // Handle activity saving state
             System.out.println("Activity SaveInstanceState: " + activity.getLocalClassName());
+            log("Activity SaveInstanceState: " + activity.getLocalClassName());
         }
 
         @Override
         public void onActivityDestroyed(Activity activity) {
             // Handle activity destroyed
             System.out.println("Activity Destroyed: " + activity.getLocalClassName());
+            log("Activity Destroyed: " + activity.getLocalClassName());
         }
     }
 }
