@@ -9,7 +9,8 @@ public class ConfigurationTest {
     public void testConfigurationInitialization() {
         Configuration config = new Configuration(
                 "127.0.0.1", 5000, "com.example.app", "client-123",
-                "Samsung", "Galaxy S21", "Android 14", "1.2.3", "device-abc"
+                "Samsung", "Galaxy S21", "Android 14", "1.2.3",
+                "device-abc","user-xyz"
         );
 
         assertEquals("127.0.0.1", config.getHost());

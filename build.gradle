@@ -4,12 +4,3 @@ alias(libs.plugins.android.library) apply false
     alias(libs.plugins.protobuf) apply false
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-        maven {
-            url = uri("https://maven.pkg.github.com/YOUR_USERNAME/YOUR_REPOSITORY")
-        }
-    }
-}

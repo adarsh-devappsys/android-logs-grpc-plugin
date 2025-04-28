@@ -10,9 +10,10 @@ public class Configuration {
     private String osVersion;
     private String appVersion;
     private String deviceId;
+    private String userId;
 
 
-    public Configuration(String host, int port, String packageName, String clientId, String manufacturer, String model, String osVersion, String appVersion, String deviceId) {
+    public Configuration(String host, int port, String packageName, String clientId, String manufacturer, String model, String osVersion, String appVersion, String deviceId, String userId) {
         this.host = host;
         this.port = port;
         this.packageName = packageName;
@@ -22,6 +23,7 @@ public class Configuration {
         this.osVersion = osVersion;
         this.appVersion = appVersion;
         this.deviceId = deviceId;
+        this.userId = userId;
     }
 
     public String getHost() {

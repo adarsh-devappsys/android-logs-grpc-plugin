@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.protobuf)
+    id 'maven-publish'
 }
 
 android {
@@ -16,9 +17,11 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+
+
     buildTypes {
         release {
-            minifyEnabled true
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -27,12 +30,31 @@ android {
         targetCompatibility JavaVersion.VERSION_11
     }
     sourceSets {
-        maybeCreate("main").java.srcDirs += "build/generated/source/proto/main/java"
+        main {
+            java.srcDirs = ['src/main/java']    // 👈 tell Gradle about Java source
+            proto.srcDir 'src/main/proto'        // 👈 your proto files
+        }
+        debug {
+            java.srcDirs = ['src/main/java']
+            proto.srcDir 'src/main/proto'
+        }
+        release {
+//            java.srcDirs = ['src/main/java']
+//            proto.srcDir 'src/main/proto'
+        }
+    }
+
+    publishing{
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
     }
 }
 
 dependencies {
 
+    implementation libs.annotation.jvm
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
 
@@ -41,6 +63,7 @@ dependencies {
     implementation libs.grpc.protobuf
     implementation libs.grpc.stub
     implementation libs.protobuf.java
+    compileOnly libs.javax.annotation.api
 }
 
 
@@ -56,13 +79,67 @@ protobuf {
     }
 
     generateProtoTasks {
-        all().configureEach {
-            plugins {
-                register("grpc")
-            }
-            builtins {
-                register("java")
+    all().configureEach { task ->
+        task.builtins {
+           register("java"){
+               outputSubDir = "generated"
+           }
+        }
+        task.plugins {
+            register("grpc"){
+                outputSubDir = "generated"
             }
         }
     }
+}
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = new File(rootDir, 'local.properties')
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.newDataInputStream())
+}
+
+def gprUser = localProperties.getProperty('gpr.user') ?: ''
+def gprToken = localProperties.getProperty('gpr.token') ?: ''
+
+publishing {
+    publications {
+        register("release", MavenPublication) {
+            afterEvaluate {
+                from(components.findByName("release"))
+
+                groupId = 'com.devappsys'
+                artifactId = 'logs-grpc-plugin'
+                version = '0.0.5'
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/adarsh-devappsys/android-logs-grpc-plugin")
+            credentials {
+                username =gprUser
+                password = gprToken
+            }
+        }
+    }
+}
+
+tasks.register("printComponents") {
+    doLast {
+        println("Available components:")
+        components.forEach { component ->
+            println("- ${component.name}")
+        }
+        if (components.isEmpty()) {
+            println("⚠️ No components found! Make sure singleVariant is configured inside android { publishing { } }.")
+        }
+    }
+}
+
+
+tasks.withType(JavaCompile).configureEach {
+    println("✅ Compiling Java sources for ${name} : ${source.files}")
 }

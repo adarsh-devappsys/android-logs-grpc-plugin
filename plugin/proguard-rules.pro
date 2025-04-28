@@ -19,3 +19,9 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# Keep all classes generated from proto/grpc
+-keep class io.grpc.** { *; }
+-keep class com.devappsys.logs_grpc.** { *; }
+-keepclassmembers class * {
+    @javax.annotation.Generated *;
+}

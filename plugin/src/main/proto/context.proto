@@ -1,6 +1,8 @@
 syntax = "proto3";
 
-package com.devappsys.log;
+package log;
+
+option java_package = "com.devappsys.log";
 
 
 
