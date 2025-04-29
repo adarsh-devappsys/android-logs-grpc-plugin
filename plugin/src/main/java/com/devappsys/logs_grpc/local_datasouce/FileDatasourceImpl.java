@@ -1,7 +1,6 @@
 package com.devappsys.logs_grpc.local_datasouce;
 
 import android.content.Context;
-import android.os.Build;
 
 import com.devappsys.logs_grpc.models.data.ContextModel;
 import com.devappsys.logs_grpc.models.data.EventModel;
@@ -11,129 +10,294 @@ import com.devappsys.log.Event;
 import com.devappsys.log.Log;
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public class FileDatasourceImpl implements LocalDatasourceRepo {
 
+    private static final String ROOT_DIR = "logs_storage";
+    private static final String LOG_DIR = "logs";
+    private static final String EVENT_DIR = "events";
+    private static final String CONTEXT_DIR = "contexts";
+
     private static final String LOG_FILE = "logs_data.dat";
     private static final String EVENT_FILE = "events_data.dat";
     private static final String CONTEXT_FILE = "contexts_data.dat";
+    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
 
     private final Context mContext;
 
-    // Constructor accepts context
-    public FileDatasourceImpl(Context context) {
+    private BufferedOutputStream logOutputStream;
+    private BufferedOutputStream eventOutputStream;
+    private BufferedOutputStream contextOutputStream;
+
+    private static FileDatasourceImpl instance;
+
+    public static synchronized FileDatasourceImpl getInstance(Context context) {
+        if (instance == null) {
+            instance = new FileDatasourceImpl(context);
+        }
+        return instance;
+    }
+    private FileDatasourceImpl(Context context) {
         this.mContext = context;
+        initStorage();
+    }
+
+    private void initStorage() {
+        try {
+            File root = new File(mContext.getFilesDir(), ROOT_DIR);
+            if (!root.exists()) root.mkdirs();
+
+            File logDir = new File(root, LOG_DIR);
+            if (!logDir.exists()) logDir.mkdirs();
+
+            File eventDir = new File(root, EVENT_DIR);
+            if (!eventDir.exists()) eventDir.mkdirs();
+
+            File contextDir = new File(root, CONTEXT_DIR);
+            if (!contextDir.exists()) contextDir.mkdirs();
+
+            logOutputStream = new BufferedOutputStream(new FileOutputStream(new File(logDir, LOG_FILE), true));
+            eventOutputStream = new BufferedOutputStream(new FileOutputStream(new File(eventDir, EVENT_FILE), true));
+            contextOutputStream = new BufferedOutputStream(new FileOutputStream(new File(contextDir, CONTEXT_FILE), true));
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private File getDir(String subDir) {
+        return new File(new File(mContext.getFilesDir(), ROOT_DIR), subDir);
+    }
+
+    private File getLogFile() {
+        return new File(getDir(LOG_DIR), LOG_FILE);
+    }
+
+    private File getEventFile() {
+        return new File(getDir(EVENT_DIR), EVENT_FILE);
+    }
+
+    private File getContextFile() {
+        return new File(getDir(CONTEXT_DIR), CONTEXT_FILE);
     }
 
     @Override
     public void saveLog(LogModel logModel) {
-        // Convert LogModel to Protobuf LogMessage and write to file
-        Log.LogMessage logMessage = logModel.toProtobuf();
-        writeToFile(LOG_FILE, logMessage.toByteArray());
+        try {
+            logOutputStream.write(logModel.toProtobuf().toByteArray());
+            logOutputStream.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
     public void saveEvent(EventModel eventModel) {
-        // Convert EventModel to Protobuf EventMessage and write to file
-        Event.EventMessage eventMessage = eventModel.toProtobuf();
-        writeToFile(EVENT_FILE, eventMessage.toByteArray());
+        try {
+            if (getEventFile().length() >= MAX_FILE_SIZE) {
+                rotateEventFile();
+            }
+            eventOutputStream.write(eventModel.toProtobuf().toByteArray());
+            eventOutputStream.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
     public void saveContext(ContextModel contextModel) {
-        // Convert ContextModel to Protobuf Context and write to file
-        ContextOuterClass.Context context = contextModel.toProtobuf();
-        writeToFile(CONTEXT_FILE, context.toByteArray());
-    }
-
-
-
-    // Helper method to write a byte array to a file in internal storage
-    private void writeToFile(String filename, byte[] data) {
-        FileOutputStream fos = null;
         try {
-            fos = mContext.openFileOutput(filename, Context.MODE_APPEND);
-            fos.write(data);
+            contextOutputStream.write(contextModel.toProtobuf().toByteArray());
+            contextOutputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
-        } finally {
-            if (fos != null) {
-                try {
-                    fos.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+        }
+    }
+
+    @Override
+    public void cleanup(){
+        try {
+            if (logOutputStream != null) {
+                logOutputStream.close();
+            }
+            if (eventOutputStream != null) {
+                eventOutputStream.close();
+            }
+            if (contextOutputStream != null) {
+                contextOutputStream.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public boolean hasLogsToUpload() {
+        File[] files = getDir(LOG_DIR).listFiles((dir, name) ->
+                name.startsWith("logs_data_") && !name.equals(LOG_FILE));
+        return files != null && files.length > 0;
+    }
+
+    @Override
+    public boolean hasEventsToUpload() {
+        File[] files = getDir(EVENT_DIR).listFiles((dir, name) ->
+                name.startsWith("events_data_") && !name.equals(EVENT_FILE));
+        return files != null && files.length > 0;
+    }
+
+    @Override
+    public boolean hasContextsToUpload() {
+        File[] files = getDir(CONTEXT_DIR).listFiles((dir, name) ->
+                name.startsWith("contexts_data_") && !name.equals(CONTEXT_FILE));
+        return files != null && files.length > 0;
+    }
+
+    @Override
+    public List<File> getLogsFile() {
+        List<File> files = new ArrayList<>();
+
+        File[] allFiles = getDir(LOG_DIR).listFiles((dir, name) ->
+                name.startsWith("logs_data_") && !name.equals(LOG_FILE));
+
+        if (allFiles != null) {
+            Collections.addAll(files, allFiles);
+        }
+
+        return files;
+    }
+
+    @Override
+    public List<File> getEventsFile() {
+        List<File> files = new ArrayList<>();
+
+        File[] allFiles = getDir(EVENT_DIR).listFiles((dir, name) ->
+                name.startsWith("events_data_") && !name.equals(EVENT_FILE));
+
+        if (allFiles != null) {
+            Collections.addAll(files, allFiles);
+        }
+
+        return files;
+    }
+
+    @Override
+    public List<File> getContextsFile() {
+        List<File> files = new ArrayList<>();
+
+        File[] allFiles = getDir(CONTEXT_DIR).listFiles((dir, name) ->
+                name.startsWith("contexts_data_") && !name.equals(CONTEXT_FILE));
+
+        if (allFiles != null) {
+            Collections.addAll(files, allFiles);
+        }
+
+        return files;
+    }
+
+    @Override
+    public void deleteLogsFile(String fileName) {
+        File file = new File(getDir(LOG_DIR), fileName);
+        if (file.exists()) {
+            file.delete();
+        }
+    }
+
+    @Override
+    public void deleteEventsFile(String fileName) {
+        File file = new File(getDir(EVENT_DIR), fileName);
+        if (file.exists()) {
+            file.delete();
+        }
+    }
+
+    @Override
+    public void deleteContextsFile(String fileName) {
+        File file = new File(getDir(CONTEXT_DIR), fileName);
+        if (file.exists()) {
+            file.delete();
+        }
+    }
+
+    @Override
+    public void deleteAllLogs() {
+        File[] files = getDir(LOG_DIR).listFiles();
+        if (files != null) {
+            for (File file : files) {
+                file.delete();
             }
         }
     }
 
     @Override
-    public Log.LogList getLogs() {
-        byte[] data = readFromFile(LOG_FILE);
-        if (data.length == 0) {
-            return Log.LogList.getDefaultInstance();  // Return empty LogList
-        }
-
-        try {
-            return Log.LogList.parseFrom(data);  // Parse and return Log.LogList
-        } catch (IOException e) {
-            e.printStackTrace();
-            return Log.LogList.getDefaultInstance();  // Return default empty LogList on error
+    public void deleteAllEvents() {
+        File[] files = getDir(EVENT_DIR).listFiles();
+        if (files != null) {
+            for (File file : files) {
+                file.delete();
+            }
         }
     }
 
     @Override
-    public Event.EventList getEvents() {
-        byte[] data = readFromFile(EVENT_FILE);
-        if (data.length == 0) {
-            return Event.EventList.getDefaultInstance();  // Return empty EventList
-        }
-
-        try {
-            return Event.EventList.parseFrom(data);  // Parse and return Event.EventList
-        } catch (IOException e) {
-            e.printStackTrace();
-            return Event.EventList.getDefaultInstance();  // Return default empty EventList on error
+    public void deleteAllContexts() {
+        File[] files = getDir(CONTEXT_DIR).listFiles();
+        if (files != null) {
+            for (File file : files) {
+                file.delete();
+            }
         }
     }
 
     @Override
-    public ContextOuterClass.ContextList getContexts() {
-        byte[] data = readFromFile(CONTEXT_FILE);
-        if (data.length == 0) {
-            return ContextOuterClass.ContextList.getDefaultInstance();  // Return empty ContextList
-        }
-
+    public void rotateEmergency() {
         try {
-            return ContextOuterClass.ContextList.parseFrom(data);  // Parse and return ContextList
+            rotateContextsFile();
+            rotateLogsFile();
+            rotateEventFile();
         } catch (IOException e) {
             e.printStackTrace();
-            return ContextOuterClass.ContextList.getDefaultInstance();  // Return default empty ContextList on error
         }
     }
 
-    // Helper method to read byte data from a file in internal storage
-    private byte[] readFromFile(String filename) {
-        FileInputStream fis = null;
-        try {
-            fis = mContext.openFileInput(filename);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                return fis.readAllBytes();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return new byte[0];  // Return empty byte array on error
-        } finally {
-            if (fis != null) {
-                try {
-                    fis.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+    private void rotateEventFile() throws IOException {
+        if (eventOutputStream != null) {
+            eventOutputStream.close();
         }
-        return new byte[0];
+
+        File current = getEventFile();
+        String newName = "events_data_" + System.currentTimeMillis() + ".dat";
+        File renamed = new File(getDir(EVENT_DIR), newName);
+        current.renameTo(renamed);
+
+        eventOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+    }
+
+    private void rotateLogsFile()throws IOException{
+        if (logOutputStream != null) {
+            logOutputStream.close();
+        }
+
+        File current = getLogFile();
+        String newName = "logs_data_" + System.currentTimeMillis() + ".dat";
+        File renamed = new File(getDir(LOG_DIR), newName);
+        current.renameTo(renamed);
+
+        logOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+    }
+
+    private void rotateContextsFile()throws IOException{
+        if (contextOutputStream != null) {
+            contextOutputStream.close();
+        }
+
+        File current = getContextFile();
+        String newName = "contexts_data_" + System.currentTimeMillis() + ".dat";
+        File renamed = new File(getDir(CONTEXT_DIR), newName);
+        current.renameTo(renamed);
+
+        contextOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
     }
 }

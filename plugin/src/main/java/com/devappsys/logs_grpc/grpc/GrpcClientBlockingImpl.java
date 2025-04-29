@@ -7,6 +7,7 @@ import com.devappsys.log.EventServiceGrpc;
 import com.devappsys.log.Log;
 import com.devappsys.log.LogServiceGrpc;
 
+import java.io.File;
 import java.util.concurrent.TimeUnit;
 
 import io.grpc.ManagedChannel;
@@ -90,6 +91,21 @@ public class GrpcClientBlockingImpl implements GrpcClient {
     @Override
     public ContextOuterClass.Response sendContextList(ContextOuterClass.ContextList contextList) {
         return _contextStub.sendContextList(contextList);
+    }
+
+    @Override
+    public ContextOuterClass.Response sendLogFile(Log.LogFileRequest logFile) {
+        return _logStub.sendLogFile(logFile);
+    }
+
+    @Override
+    public ContextOuterClass.Response sendEventFile(Event.EventFileRequest eventFile) {
+        return _eventStub.sendEventFile(eventFile);
+    }
+
+    @Override
+    public ContextOuterClass.Response sendContextFile(ContextOuterClass.ContextFileRequest contextFile) {
+        return _contextStub.sendContextFile(contextFile);
     }
 
 }

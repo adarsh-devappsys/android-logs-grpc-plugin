@@ -13,7 +13,6 @@ public class LogModel {
     private String sessionID;
     private Timestamp loggedAt; // This will be a timestamp from Protobuf
     private double freeRAMMB;
-    private double freeStorageMB;
     private String deviceModel;
     private String deviceOS;
     private String deviceOSVersion;
@@ -23,8 +22,7 @@ public class LogModel {
 
     // Constructor with all fields
     public LogModel( int level, int type, String message, String stackTrace,
-                    String sessionID, Timestamp loggedAt, double freeRAMMB,
-                    double freeStorageMB, String deviceModel, String deviceOS, String deviceOSVersion) {
+                    String sessionID, Timestamp loggedAt, double freeRAMMB, String deviceModel, String deviceOS, String deviceOSVersion) {
         this.logID = java.util.UUID.randomUUID().toString(); // Generate a unique log ID
         this.level = level;
         this.type = type;
@@ -33,7 +31,6 @@ public class LogModel {
         this.sessionID = sessionID;
         this.loggedAt = loggedAt;
         this.freeRAMMB = freeRAMMB;
-        this.freeStorageMB = freeStorageMB;
         this.deviceModel = deviceModel;
         this.deviceOS = deviceOS;
         this.deviceOSVersion = deviceOSVersion;
@@ -56,7 +53,6 @@ public class LogModel {
                 .setSessionID(this.sessionID)
                 .setLoggedAt(this.loggedAt)
                 .setFreeRAMMB(this.freeRAMMB)
-                .setFreeStorageMB(this.freeStorageMB)
                 .setDeviceModel(this.deviceModel)
                 .setDeviceOS(this.deviceOS)
                 .setDeviceOSVersion(this.deviceOSVersion);
@@ -131,14 +127,6 @@ public class LogModel {
         this.freeRAMMB = freeRAMMB;
     }
 
-    public double getFreeStorageMB() {
-        return freeStorageMB;
-    }
-
-    public void setFreeStorageMB(double freeStorageMB) {
-        this.freeStorageMB = freeStorageMB;
-    }
-
     public String getDeviceModel() {
         return deviceModel;
     }
@@ -175,7 +163,6 @@ public class LogModel {
                 ", sessionID='" + sessionID + '\'' +
                 ", loggedAt=" + loggedAt +
                 ", freeRAMMB=" + freeRAMMB +
-                ", freeStorageMB=" + freeStorageMB +
                 ", deviceModel='" + deviceModel + '\'' +
                 ", deviceOS='" + deviceOS + '\'' +
                 ", deviceOSVersion='" + deviceOSVersion + '\'' +

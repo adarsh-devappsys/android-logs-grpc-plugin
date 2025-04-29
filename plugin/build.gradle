@@ -55,6 +55,7 @@ android {
 dependencies {
 
     implementation libs.annotation.jvm
+    implementation libs.work.runtime
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
 
