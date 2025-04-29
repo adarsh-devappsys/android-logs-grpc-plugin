@@ -10,8 +10,12 @@ import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.os.Bundle;
 
+import androidx.work.Constraints;
+import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.OneTimeWorkRequest;
 import com.devappsys.logs_grpc.worker.UploadWorker;
+
+import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 import com.devappsys.logs_grpc.grpc.GrpcClient;
 import com.devappsys.logs_grpc.grpc.GrpcClientBlockingImpl;
@@ -24,6 +28,7 @@ import com.google.protobuf.Timestamp;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 public class LogsPlugin {
     private static LogsPlugin _instance;
@@ -92,11 +97,19 @@ public class LogsPlugin {
         } else {
             throw new IllegalStateException("Context must be of type Application");
         }
-
-
-        OneTimeWorkRequest uploadRequest = new OneTimeWorkRequest.Builder(UploadWorker.class)
+        Constraints constraints = new Constraints.Builder()
+                .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
                 .build();
-        WorkManager.getInstance(context).enqueue(uploadRequest);
+        PeriodicWorkRequest uploadRequest = new PeriodicWorkRequest.Builder(
+                UploadWorker.class,
+                15, TimeUnit.MINUTES
+        ).setConstraints(constraints).build();
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "log_upload_worker",                             // Unique name
+                ExistingPeriodicWorkPolicy.UPDATE,                 // Policy
+                uploadRequest                                    // The request
+        );
     }
 
     public static boolean isInitialized() {
