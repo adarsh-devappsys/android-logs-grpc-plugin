@@ -1,6 +1,5 @@
 package com.devappsys.logs_grpc.listener;
 
-
 import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -9,6 +8,8 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.telephony.TelephonyManager;
+
+import com.devappsys.logs_grpc.models.data.ContextModel;  // Assuming ContextModel is your log context model
 
 public class NetworkChangeReceiver extends BroadcastReceiver {
 
@@ -30,8 +31,12 @@ public class NetworkChangeReceiver extends BroadcastReceiver {
         NetworkCapabilities networkCapabilities = cm.getNetworkCapabilities(activeNetwork);
 
         if (networkCapabilities != null) {
+            String networkType = "";
+            String carrierDetails = "";
+
             if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                callback.onNetworkChange("Wi-Fi");
+                networkType = "Wi-Fi";
+                carrierDetails = "N/A";
             } else if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
                 // Cellular network (SIM card)
                 TelephonyManager telephonyManager = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
@@ -40,17 +45,22 @@ public class NetworkChangeReceiver extends BroadcastReceiver {
                     String carrierName = telephonyManager.getNetworkOperatorName();  // Example: "Airtel" or "Jio"
                     String carrierId = telephonyManager.getNetworkOperator();       // Example: "40410" (MCC+MNC code)
 
-                    String networkDetails = "Mobile Data - Carrier: " + carrierName + ", Carrier ID: " + carrierId;
-                    callback.onNetworkChange(networkDetails);
+                    carrierDetails = carrierName ;
+                    networkType = carrierId;
                 } else {
-                    callback.onNetworkChange("Mobile Data - Carrier Unknown");
+                    carrierDetails = "Mobile Data - Carrier Unknown";
+                    networkType = "Mobile Data";
                 }
             }
+
+
+            // Trigger callback with the ContextModel, network type, and carrier details
+            callback.onNetworkChange(carrierDetails, networkType);
         }
     }
 
-    // Callback interface for notifying the network change
+    // Callback interface for notifying the network change with all data
     public interface NetworkChangeCallback {
-        void onNetworkChange(String networkType);
+        void onNetworkChange(String carrierName, String carrierID);
     }
 }

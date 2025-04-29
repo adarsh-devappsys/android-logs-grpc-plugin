@@ -2,12 +2,16 @@ package com.devappsys.logs_grpc.local_datasouce;
 
 import android.content.Context;
 
+import androidx.work.Constraints;
+import androidx.work.ExistingWorkPolicy;
+import androidx.work.NetworkType;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
+
 import com.devappsys.logs_grpc.models.data.ContextModel;
 import com.devappsys.logs_grpc.models.data.EventModel;
 import com.devappsys.logs_grpc.models.data.LogModel;
-import com.devappsys.log.ContextOuterClass;
-import com.devappsys.log.Event;
-import com.devappsys.log.Log;
+import com.devappsys.logs_grpc.worker.UploadWorker;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -85,7 +89,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     }
 
     @Override
-    public void saveLog(LogModel logModel) {
+    public synchronized void saveLog(LogModel logModel) {
         try {
             logOutputStream.write(logModel.toProtobuf().toByteArray());
             logOutputStream.flush();
@@ -95,7 +99,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     }
 
     @Override
-    public void saveEvent(EventModel eventModel) {
+    public synchronized void saveEvent(EventModel eventModel) {
         try {
             if (getEventFile().length() >= MAX_FILE_SIZE) {
                 rotateEventFile();
@@ -108,7 +112,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     }
 
     @Override
-    public void saveContext(ContextModel contextModel) {
+    public synchronized void saveContext(ContextModel contextModel) {
         try {
             contextOutputStream.write(contextModel.toProtobuf().toByteArray());
             contextOutputStream.flush();
@@ -198,27 +202,18 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     }
 
     @Override
-    public void deleteLogsFile(String fileName) {
-        File file = new File(getDir(LOG_DIR), fileName);
-        if (file.exists()) {
-            file.delete();
-        }
+    public synchronized void deleteLogsFile(String fileName) {
+        new File(getDir(LOG_DIR), fileName).delete();
     }
 
     @Override
-    public void deleteEventsFile(String fileName) {
-        File file = new File(getDir(EVENT_DIR), fileName);
-        if (file.exists()) {
-            file.delete();
-        }
+    public synchronized void deleteEventsFile(String fileName) {
+        new File(getDir(EVENT_DIR), fileName).delete();
     }
 
     @Override
-    public void deleteContextsFile(String fileName) {
-        File file = new File(getDir(CONTEXT_DIR), fileName);
-        if (file.exists()) {
-            file.delete();
-        }
+    public synchronized void deleteContextsFile(String fileName) {
+        new File(getDir(CONTEXT_DIR), fileName).delete();
     }
 
     @Override
@@ -257,9 +252,19 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
             rotateContextsFile();
             rotateLogsFile();
             rotateEventFile();
+            startWorker();
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+    private void startWorker() {
+        WorkManager.getInstance(mContext).enqueueUniqueWork(
+                "UploadWorkerJob",  // Unique work name
+                ExistingWorkPolicy.KEEP, // Don't enqueue if one is already running or enqueued
+                new OneTimeWorkRequest.Builder(UploadWorker.class)
+                        .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                        .build()
+        );
     }
 
     private void rotateEventFile() throws IOException {
@@ -273,6 +278,8 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         current.renameTo(renamed);
 
         eventOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+        startWorker();
+
     }
 
     private void rotateLogsFile()throws IOException{
@@ -286,6 +293,8 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         current.renameTo(renamed);
 
         logOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+        startWorker();
+
     }
 
     private void rotateContextsFile()throws IOException{
@@ -299,5 +308,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         current.renameTo(renamed);
 
         contextOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+        startWorker();
+
     }
 }

@@ -1,32 +1,38 @@
 package com.devappsys.logs_grpc;
 
 
-import android.content.SharedPreferences;
 import static com.devappsys.logs_grpc.util.MemoryUtil.getFreeMemory;
+
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.os.Bundle;
 
+import androidx.annotation.NonNull;
 import androidx.work.Constraints;
 import androidx.work.ExistingPeriodicWorkPolicy;
-import androidx.work.OneTimeWorkRequest;
-import com.devappsys.logs_grpc.worker.UploadWorker;
-
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
+
+import com.devappsys.log.Log;
 import com.devappsys.logs_grpc.grpc.GrpcClient;
 import com.devappsys.logs_grpc.grpc.GrpcClientBlockingImpl;
 import com.devappsys.logs_grpc.listener.NetworkChangeReceiver;
 import com.devappsys.logs_grpc.local_datasouce.FileDatasourceImpl;
 import com.devappsys.logs_grpc.local_datasouce.LocalDatasourceRepo;
 import com.devappsys.logs_grpc.models.Configuration;
+import com.devappsys.logs_grpc.models.data.ContextModel;
+import com.devappsys.logs_grpc.models.data.EventModel;
 import com.devappsys.logs_grpc.models.data.LogModel;
+import com.devappsys.logs_grpc.worker.UploadWorker;
 import com.google.protobuf.Timestamp;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -83,7 +89,20 @@ public class LogsPlugin {
         localDatasourceRepo = FileDatasourceImpl.getInstance(context);
 
         // Register the network change receiver
-        networkChangeReceiver = new NetworkChangeReceiver(LogsPlugin::logContext);
+        networkChangeReceiver = new NetworkChangeReceiver((carrierName, carrierId) -> {
+            logContext(
+                    configuration.getDeviceId(),
+                    configuration.getAppVersion(),
+                    configuration.getPackageName(),
+                    configuration.getUserId(),
+                    sessionId,
+                    "en",
+                    carrierId,
+                    carrierName,
+                    "",
+                    false
+            );
+        });
 
         // Register for connectivity changes
         IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
@@ -132,24 +151,50 @@ public class LogsPlugin {
 
         // ✅ Register the custom uncaught exception handler
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
-            System.out.println("🚨 Uncaught Exception in thread: " + thread.getName());
-// log
             // worker trigger
-            logEvent("🚨 Uncaught Exception in thread: " + thread.getName() + " - " + throwable.getMessage() + " - " + Arrays.toString(throwable.getStackTrace()));
+            logAppCrash(throwable);
             _instance.localDatasourceRepo.rotateEmergency();
             Objects.requireNonNull(Thread.getDefaultUncaughtExceptionHandler()).uncaughtException(thread, throwable);
         });
     }
 
-
-    public static void log(String message) {
+    // core methods
+    public static void logAppCrash(Throwable throwable) {
         if (_instance == null) {
             throw new IllegalStateException("LogsPlugin is not initialized");
         }
+
+        // Generate event details
+        String eventID = java.util.UUID.randomUUID().toString();  // Unique event ID
+        String eventName = "App Crash";                            // Event name
+        String screenName = "Unknown";                             // Screen name, can be set to "Unknown" as crash occurs unexpectedly
+        Timestamp eventTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();  // Timestamp
+
+        // Prepare stack trace
+        String stackTrace = Arrays.toString(throwable.getStackTrace());
+
+        // Prepare custom attributes with crash info
+        Map<String, String> customAttributes = new HashMap<>();
+        customAttributes.put("error_message", throwable.getMessage());
+        customAttributes.put("stack_trace", stackTrace);
+
+        // Log the crash event using logEvent
+        logEvent(eventID, eventName, screenName, eventTime, customAttributes);
+    }
+
+    private static void logInternal(Log.LogLevel level, Log.LogType type, String tag, String message, Throwable throwable) {
+        if (_instance == null) throw new IllegalStateException("LogsPlugin is not initialized");
+
+        String stackTrace = (throwable != null) ? Arrays.toString(throwable.getStackTrace()) : "";
+
         _instance.localDatasourceRepo.saveLog(
                 new LogModel(
-                        1, 1, message, message,
-                        _instance.sessionId, Timestamp.getDefaultInstance().getDefaultInstanceForType(),
+                        level.ordinal(),
+                        type.ordinal(),
+                        tag + ": " + message,
+                        stackTrace,
+                        _instance.sessionId,
+                        Timestamp.getDefaultInstance(),
                         getFreeMemory(_instance.context),
                         _instance._configuration.getPackageName(),
                         _instance._configuration.getClientId(),
@@ -158,37 +203,164 @@ public class LogsPlugin {
         );
     }
 
-    public static void logEvent(String event){
+    public static void logEvent(String eventID, String eventName, String screenName, Timestamp eventTime,
+                                boolean appOpened, boolean appBackgrounded, boolean sessionStarted,
+                                boolean sessionEnded, double latitude, double longitude, String city,
+                                String region, String country, String carrier, boolean dynamicConfigChanged,
+                                Map<String, String> customAttributes) {
         if (_instance == null) {
             throw new IllegalStateException("LogsPlugin is not initialized");
         }
-        _instance.localDatasourceRepo.saveLog(
-                new LogModel(
-                        1, 1, event, event,
-                        _instance.sessionId, Timestamp.getDefaultInstance().getDefaultInstanceForType(),
-                        getFreeMemory(_instance.context),
-                        _instance._configuration.getPackageName(),
-                        _instance._configuration.getClientId(),
-                        _instance._configuration.getPackageName()
-                )
+
+        EventModel eventModel = new EventModel(
+                eventID,
+                eventName,
+                screenName,
+                eventTime,
+                appOpened,
+                appBackgrounded,
+                sessionStarted,
+                sessionEnded,
+                latitude,
+                longitude,
+                city,
+                region,
+                country,
+                carrier,
+                dynamicConfigChanged,
+                customAttributes
         );
+
+        _instance.localDatasourceRepo.saveEvent(eventModel);
+    }
+
+    public static void logEvent(String eventID, String eventName, String screenName, Timestamp eventTime, Map<String, String> customAttributes) {
+        if (_instance == null) {
+            throw new IllegalStateException("LogsPlugin is not initialized");
+        }
+
+        // Create the EventModel object
+        EventModel eventModel = new EventModel(
+                eventID,
+                eventName,
+                screenName,
+                eventTime,
+                false,  // App is not opened or backgrounded here; this is just an activity event.
+                false,  // Same here; app state might not be relevant
+                false,  // Session start and end are not part of this event.
+                false,
+                0.0,    // Latitude, longitude can be added if needed
+                0.0,
+                "",     // City, region, country info can be added if needed
+                "",
+                "",
+                "",     // Carrier can be added if needed
+                false,   // Dynamic config changes can be added if needed
+                customAttributes
+        );
+
+        // Save the event
+        _instance.localDatasourceRepo.saveEvent(eventModel);
     }
 
 
-    public static void logContext(String context){
+    // helper methods
+    public static void logDebug(String tag, String message) {
+        logInternal(Log.LogLevel.DEBUG, Log.LogType.NON_FATAL, tag, message, null);
+    }
+
+    public static void logInfo(String tag, String message) {
+        logInternal(Log.LogLevel.INFO, Log.LogType.NON_FATAL, tag, message, null);
+    }
+
+    public static void logWarning(String tag, String message) {
+        logInternal(Log.LogLevel.WARN, Log.LogType.UNRECOGNIZED, tag, message, null);
+    }
+
+    public static void logError(String tag, String message, Throwable throwable) {
+        logInternal(Log.LogLevel.ERROR, Log.LogType.FATAL_CRASH, tag, message, throwable);
+    }
+
+// log    methods end
+
+
+// Specific Event Logging Methods (App Opened, Session Started, etc.)
+
+    public static void logAppOpened(String eventID, String screenName, Timestamp eventTime,
+                                    double latitude, double longitude, String city, String region,
+                                    String country, String carrier, Map<String, String> customAttributes) {
+        logEvent(eventID, "App Opened", screenName, eventTime, true, false, false, false, latitude,
+                longitude, city, region, country, carrier, false, customAttributes);
+    }
+
+    public static void logAppBackgrounded(String eventID, String screenName, Timestamp eventTime,
+                                          double latitude, double longitude, String city, String region,
+                                          String country, String carrier, Map<String, String> customAttributes) {
+        logEvent(eventID, "App Backgrounded", screenName, eventTime, false, true, false, false, latitude,
+                longitude, city, region, country, carrier, false, customAttributes);
+    }
+
+    public static void logSessionStarted(String eventID, String screenName, Timestamp eventTime,
+                                         double latitude, double longitude, String city, String region,
+                                         String country, String carrier, Map<String, String> customAttributes) {
+        logEvent(eventID, "Session Started", screenName, eventTime, false, false, true, false, latitude,
+                longitude, city, region, country, carrier, false, customAttributes);
+    }
+
+    public static void logSessionEnded(String eventID, String screenName, Timestamp eventTime,
+                                       double latitude, double longitude, String city, String region,
+                                       String country, String carrier, Map<String, String> customAttributes) {
+        logEvent(eventID, "Session Ended", screenName, eventTime, false, false, false, true, latitude,
+                longitude, city, region, country, carrier, false, customAttributes);
+    }
+
+    public static void logActivityLifecycleEvent(String activityName, String eventType) {
         if (_instance == null) {
             throw new IllegalStateException("LogsPlugin is not initialized");
         }
-        _instance.localDatasourceRepo.saveLog(
-                new LogModel(
-                        1, 1, context, context,
-                        _instance.sessionId, Timestamp.getDefaultInstance().getDefaultInstanceForType(),
-                        getFreeMemory(_instance.context),
-                        _instance._configuration.getPackageName(),
-                        _instance._configuration.getClientId(),
-                        _instance._configuration.getPackageName()
-                )
+
+        // Create event information
+        String eventID = java.util.UUID.randomUUID().toString(); // Unique event ID
+        String eventName = "Activity Lifecycle - " + eventType;   // Event type can be "Created", "Started", "Resumed", "Paused", "Stopped", "Destroyed"
+        String screenName = activityName;  // Activity name
+        Timestamp eventTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();  // Current time
+
+        // Additional details (you can add any other information that’s relevant, such as location, app state, etc.)
+        Map<String, String> customAttributes = new HashMap<>();
+        customAttributes.put("activity_name", activityName);
+        customAttributes.put("event_type", eventType);
+
+        // Log the event using logEvent
+        logEvent(eventID, eventName, screenName, eventTime, customAttributes);
+    }
+
+    public static void logContext(String deviceID, String appVersion, String appPackageName, String userID,
+                                  String sessionID, String language, String networkStatus, String location,
+                                  String ipAddress, boolean isRooted) {
+        if (_instance == null) {
+            throw new IllegalStateException("LogsPlugin is not initialized");
+        }
+
+        // Create the ContextModel object
+        ContextModel contextModel = new ContextModel(
+                deviceID,
+                appVersion,
+                appPackageName,
+                userID,
+                sessionID,
+                language,
+                networkStatus,
+                location,
+                ipAddress,
+                isRooted
         );
+
+        // Save the context using the localDatasourceRepo
+        _instance.localDatasourceRepo.saveContext(contextModel);
+
+        // Optionally, log or handle additional logic like validating the context or triggering an event
+        // Log that the context was saved successfully (for debugging or monitoring purposes)
+        android.util.Log.d(TAG, "Context data saved: " + contextModel);
     }
 
 
@@ -203,51 +375,37 @@ public class LogsPlugin {
     private static class ActivityLifecycleCallbacks implements Application.ActivityLifecycleCallbacks {
         @Override
         public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
-            // Handle activity creation
-            System.out.println("Activity Created: " + activity.getLocalClassName());
-            logEvent("Activity Created: " + activity.getLocalClassName());
+            logActivityLifecycleEvent(activity.getLocalClassName(), "Created");
         }
 
         @Override
         public void onActivityStarted(Activity activity) {
-            // Handle activity started
-            System.out.println("Activity Started: " + activity.getLocalClassName());
-            logEvent("Activity Started: " + activity.getLocalClassName());
+            logActivityLifecycleEvent(activity.getLocalClassName(), "Started");
         }
 
         @Override
         public void onActivityResumed(Activity activity) {
-            // Handle activity resumed
-            System.out.println("Activity Resumed: " + activity.getLocalClassName());
-            logEvent("Activity Resumed: " + activity.getLocalClassName());
+            logActivityLifecycleEvent(activity.getLocalClassName(), "Resumed");
         }
 
         @Override
         public void onActivityPaused(Activity activity) {
-            // Handle activity paused
-            System.out.println("Activity Paused: " + activity.getLocalClassName());
-            logEvent("Activity Paused: " + activity.getLocalClassName());
+            logActivityLifecycleEvent(activity.getLocalClassName(), "Paused");
         }
 
         @Override
         public void onActivityStopped(Activity activity) {
-            // Handle activity stopped
-            System.out.println("Activity Stopped: " + activity.getLocalClassName());
-            logEvent("Activity Stopped: " + activity.getLocalClassName());
+            logActivityLifecycleEvent(activity.getLocalClassName(), "Stopped");
         }
 
         @Override
-        public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
-            // Handle activity saving state
-            System.out.println("Activity SaveInstanceState: " + activity.getLocalClassName());
-            logEvent("Activity SaveInstanceState: " + activity.getLocalClassName());
+        public void onActivitySaveInstanceState(Activity activity, @NonNull Bundle outState) {
+            logActivityLifecycleEvent(activity.getLocalClassName(), "SaveInstanceState");
         }
 
         @Override
         public void onActivityDestroyed(Activity activity) {
-            // Handle activity destroyed
-            System.out.println("Activity Destroyed: " + activity.getLocalClassName());
-            logEvent("Activity Destroyed: " + activity.getLocalClassName());
+            logActivityLifecycleEvent(activity.getLocalClassName(), "Destroyed");
         }
     }
 }
