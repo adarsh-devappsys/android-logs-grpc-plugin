@@ -22,14 +22,14 @@ public class EventModel {
     private String country;
     private String carrier;
     private boolean dynamicConfigChanged;
-    private Map<String, String> customAttributes;
+    private Map<String, Object> customAttributes;
 
     // Constructor
     public EventModel(String eventID, String eventName, String screenName, Timestamp eventTime,
                       boolean appOpened, boolean appBackgrounded, boolean sessionStarted,
                       boolean sessionEnded, double latitude, double longitude, String city,
                       String region, String country, String carrier, boolean dynamicConfigChanged,
-                      Map<String, String> customAttributes) {
+                      Map<String, Object> customAttributes) {
         this.eventID = eventID;
         this.eventName = eventName;
         this.screenName = screenName;
@@ -67,18 +67,19 @@ public class EventModel {
                 .setCountry(this.country)
                 .setCarrier(this.carrier)
                 .setDynamicConfigChanged(this.dynamicConfigChanged)
-                .putAllCustomAttributes(this.customAttributes);
+//                .putAllCustomAttributes(this.customAttributes)
+        ;
 
         return eventMessageBuilder.build();
     }
 
     // Getters and Setters
 
-    public Map<String, String> getCustomAttributes() {
+    public Map<String, Object> getCustomAttributes() {
         return customAttributes;
     }
 
-    public void setCustomAttributes(Map<String, String> customAttributes) {
+    public void setCustomAttributes(Map<String, Object> customAttributes) {
         this.customAttributes = customAttributes;
     }
 

@@ -35,6 +35,7 @@ public class GrpcClientBlockingImpl implements GrpcClient {
 
         _channel = ManagedChannelBuilder.forAddress(host, port)
                 .usePlaintext()
+                .maxInboundMessageSize(30*1024*1024)
                 .idleTimeout(30, TimeUnit.SECONDS) // Auto-close if idle
                 .build();
         _logStub = LogServiceGrpc.newBlockingStub(_channel);

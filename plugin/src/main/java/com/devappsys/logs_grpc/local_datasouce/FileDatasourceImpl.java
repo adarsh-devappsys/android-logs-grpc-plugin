@@ -91,6 +91,9 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveLog(LogModel logModel) {
         try {
+            if (getLogFile().length() >= MAX_FILE_SIZE) {
+                rotateLogsFile();
+            }
             logOutputStream.write(logModel.toProtobuf().toByteArray());
             logOutputStream.flush();
         } catch (IOException e) {
@@ -114,6 +117,9 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveContext(ContextModel contextModel) {
         try {
+            if (getContextFile().length() >= MAX_FILE_SIZE) {
+                rotateContextsFile();
+            }
             contextOutputStream.write(contextModel.toProtobuf().toByteArray());
             contextOutputStream.flush();
         } catch (IOException e) {

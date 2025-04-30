@@ -10,13 +10,11 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.os.Bundle;
-
 import androidx.annotation.NonNull;
 import androidx.work.Constraints;
 import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
-
 import com.devappsys.log.Log;
 import com.devappsys.logs_grpc.grpc.GrpcClient;
 import com.devappsys.logs_grpc.grpc.GrpcClientBlockingImpl;
@@ -29,7 +27,6 @@ import com.devappsys.logs_grpc.models.data.EventModel;
 import com.devappsys.logs_grpc.models.data.LogModel;
 import com.devappsys.logs_grpc.worker.UploadWorker;
 import com.google.protobuf.Timestamp;
-
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -168,18 +165,17 @@ public class LogsPlugin {
         String eventID = java.util.UUID.randomUUID().toString();  // Unique event ID
         String eventName = "App Crash";                            // Event name
         String screenName = "Unknown";                             // Screen name, can be set to "Unknown" as crash occurs unexpectedly
-        Timestamp eventTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();  // Timestamp
 
         // Prepare stack trace
         String stackTrace = Arrays.toString(throwable.getStackTrace());
 
         // Prepare custom attributes with crash info
-        Map<String, String> customAttributes = new HashMap<>();
+        Map<String, Object> customAttributes = new HashMap<>();
         customAttributes.put("error_message", throwable.getMessage());
         customAttributes.put("stack_trace", stackTrace);
 
         // Log the crash event using logEvent
-        logEvent(eventID, eventName, screenName, eventTime, customAttributes);
+        logEvent(eventID, eventName, screenName,  customAttributes);
     }
 
     private static void logInternal(Log.LogLevel level, Log.LogType type, String tag, String message, Throwable throwable) {
@@ -201,16 +197,19 @@ public class LogsPlugin {
                         _instance._configuration.getPackageName()
                 )
         );
+
+        android.util.Log.d(TAG, "Log: " + message + " | Level: " + level + " | Type: " + type);
     }
 
-    public static void logEvent(String eventID, String eventName, String screenName, Timestamp eventTime,
+    public static void logEvent(String eventID, String eventName, String screenName,
                                 boolean appOpened, boolean appBackgrounded, boolean sessionStarted,
                                 boolean sessionEnded, double latitude, double longitude, String city,
                                 String region, String country, String carrier, boolean dynamicConfigChanged,
-                                Map<String, String> customAttributes) {
+                                Map<String, Object> customAttributes) {
         if (_instance == null) {
             throw new IllegalStateException("LogsPlugin is not initialized");
         }
+        Timestamp eventTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();
 
         EventModel eventModel = new EventModel(
                 eventID,
@@ -234,10 +233,11 @@ public class LogsPlugin {
         _instance.localDatasourceRepo.saveEvent(eventModel);
     }
 
-    public static void logEvent(String eventID, String eventName, String screenName, Timestamp eventTime, Map<String, String> customAttributes) {
+    public static void logEvent(String eventID, String eventName, String screenName,  Map<String, Object> customAttributes) {
         if (_instance == null) {
             throw new IllegalStateException("LogsPlugin is not initialized");
         }
+        Timestamp eventTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();
 
         // Create the EventModel object
         EventModel eventModel = new EventModel(
@@ -286,31 +286,31 @@ public class LogsPlugin {
 
 // Specific Event Logging Methods (App Opened, Session Started, etc.)
 
-    public static void logAppOpened(String eventID, String screenName, Timestamp eventTime,
+    public static void logAppOpened(String eventID, String screenName,
                                     double latitude, double longitude, String city, String region,
-                                    String country, String carrier, Map<String, String> customAttributes) {
-        logEvent(eventID, "App Opened", screenName, eventTime, true, false, false, false, latitude,
+                                    String country, String carrier, Map<String, Object> customAttributes) {
+        logEvent(eventID, "App Opened", screenName, true, false, false, false, latitude,
                 longitude, city, region, country, carrier, false, customAttributes);
     }
 
-    public static void logAppBackgrounded(String eventID, String screenName, Timestamp eventTime,
+    public static void logAppBackgrounded(String eventID, String screenName,
                                           double latitude, double longitude, String city, String region,
-                                          String country, String carrier, Map<String, String> customAttributes) {
-        logEvent(eventID, "App Backgrounded", screenName, eventTime, false, true, false, false, latitude,
+                                          String country, String carrier, Map<String, Object> customAttributes) {
+        logEvent(eventID, "App Backgrounded", screenName,  false, true, false, false, latitude,
                 longitude, city, region, country, carrier, false, customAttributes);
     }
 
-    public static void logSessionStarted(String eventID, String screenName, Timestamp eventTime,
+    public static void logSessionStarted(String eventID, String screenName,
                                          double latitude, double longitude, String city, String region,
-                                         String country, String carrier, Map<String, String> customAttributes) {
-        logEvent(eventID, "Session Started", screenName, eventTime, false, false, true, false, latitude,
+                                         String country, String carrier, Map<String, Object> customAttributes) {
+        logEvent(eventID, "Session Started", screenName,false, false, true, false, latitude,
                 longitude, city, region, country, carrier, false, customAttributes);
     }
 
-    public static void logSessionEnded(String eventID, String screenName, Timestamp eventTime,
+    public static void logSessionEnded(String eventID, String screenName,
                                        double latitude, double longitude, String city, String region,
-                                       String country, String carrier, Map<String, String> customAttributes) {
-        logEvent(eventID, "Session Ended", screenName, eventTime, false, false, false, true, latitude,
+                                       String country, String carrier, Map<String, Object> customAttributes) {
+        logEvent(eventID, "Session Ended", screenName, false, false, false, true, latitude,
                 longitude, city, region, country, carrier, false, customAttributes);
     }
 
@@ -326,12 +326,12 @@ public class LogsPlugin {
         Timestamp eventTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();  // Current time
 
         // Additional details (you can add any other information that’s relevant, such as location, app state, etc.)
-        Map<String, String> customAttributes = new HashMap<>();
+        Map<String, Object> customAttributes = new HashMap<>();
         customAttributes.put("activity_name", activityName);
         customAttributes.put("event_type", eventType);
 
         // Log the event using logEvent
-        logEvent(eventID, eventName, screenName, eventTime, customAttributes);
+        logEvent(eventID, eventName, screenName, customAttributes);
     }
 
     public static void logContext(String deviceID, String appVersion, String appPackageName, String userID,
@@ -365,7 +365,7 @@ public class LogsPlugin {
 
 
     // Unregister the network change receiver when no longer needed (e.g., in Activity or Service onDestroy)
-    public void unregisterNetworkReceiver() {
+    public void destroy() {
         if (networkChangeReceiver != null) {
             context.unregisterReceiver(networkChangeReceiver);
         }
