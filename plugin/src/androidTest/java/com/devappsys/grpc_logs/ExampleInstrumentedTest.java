@@ -1,4 +1,4 @@
-package com.devappsys.logs_grpc;
+package com.devappsys.grpc_logs;
 
 import android.content.Context;
 
@@ -21,6 +21,6 @@ public class ExampleInstrumentedTest {
     public void useAppContext() {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        assertEquals("com.devappsys.logs_grpc", appContext.getPackageName());
+        assertEquals("com.devappsys.grpc_logs", appContext.getPackageName());
     }
 }

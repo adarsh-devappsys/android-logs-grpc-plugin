@@ -1,13 +1,18 @@
-package com.devappsys.logs_grpc.local_datasouce;
+package com.devappsys.grpc_logs.api.local_datasouce;
 
 
-import com.devappsys.logs_grpc.models.data.ContextModel;
-import com.devappsys.logs_grpc.models.data.EventModel;
-import com.devappsys.logs_grpc.models.data.LogModel;
+import com.devappsys.log.Context;
+import com.devappsys.log.Event;
+import com.devappsys.log.Log;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
+import com.devappsys.grpc_logs.api.data_models.LogModel;
+import com.devappsys.grpc_logs.api.data_models.EventModel;
+import com.devappsys.grpc_logs.api.data_models.ContextModel;
 public interface LocalDatasourceRepo {
 
     /** Save methods */
@@ -38,6 +43,23 @@ public interface LocalDatasourceRepo {
     void deleteAllEvents();
     void deleteAllContexts();
 
+    /**
+     * Get All Counts of stored data
+     */
+    long getLogsCount();
+    long getEventsCount();
+    long getContextsCount();
+
+    /**
+     * Rotate files if they exceed a certain size
+     */
+    void rotateLogsFile() throws IOException;
+    void rotateEventsFile() throws IOException;
+    void rotateContextsFile()throws IOException;
+    /** Get all stored data to protobuf */
+    Map<String,Log.LogBatch> getAllLogs();
+    Map<String,Event.EventBatch> getAllEvents();
+    Map<String,Context.ContextBatch> getAllContexts();
     /** Emergency rotate is method used for rotating files without even considering the file size  */
     void rotateEmergency();
 }

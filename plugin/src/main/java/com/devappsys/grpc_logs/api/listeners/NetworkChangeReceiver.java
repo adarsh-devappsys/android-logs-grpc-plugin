@@ -1,4 +1,5 @@
-package com.devappsys.logs_grpc.listener;
+package com.devappsys.grpc_logs.api.listeners;
+
 
 import android.Manifest;
 import android.content.BroadcastReceiver;
@@ -9,11 +10,9 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.telephony.TelephonyManager;
 
-import com.devappsys.logs_grpc.models.data.ContextModel;  // Assuming ContextModel is your log context model
-
 public class NetworkChangeReceiver extends BroadcastReceiver {
 
-    private NetworkChangeCallback callback;
+    private final NetworkChangeCallback callback;
 
     // Constructor accepting a callback
     public NetworkChangeReceiver(NetworkChangeCallback callback) {
@@ -22,13 +21,17 @@ public class NetworkChangeReceiver extends BroadcastReceiver {
 
     @androidx.annotation.RequiresPermission(allOf = {
             Manifest.permission.ACCESS_NETWORK_STATE,
-            Manifest.permission.READ_PHONE_STATE // for full carrier info (optional extra)
+            Manifest.permission.READ_PHONE_STATE
     })
     @Override
     public void onReceive(Context context, Intent intent) {
         ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         Network activeNetwork = cm.getActiveNetwork();
         NetworkCapabilities networkCapabilities = cm.getNetworkCapabilities(activeNetwork);
+
+        boolean isInternetAvailable = networkCapabilities != null &&
+                (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                        networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED));
 
         if (networkCapabilities != null) {
             String networkType = "";
@@ -38,14 +41,11 @@ public class NetworkChangeReceiver extends BroadcastReceiver {
                 networkType = "Wi-Fi";
                 carrierDetails = "N/A";
             } else if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-                // Cellular network (SIM card)
                 TelephonyManager telephonyManager = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
-
                 if (telephonyManager != null) {
-                    String carrierName = telephonyManager.getNetworkOperatorName();  // Example: "Airtel" or "Jio"
-                    String carrierId = telephonyManager.getNetworkOperator();       // Example: "40410" (MCC+MNC code)
-
-                    carrierDetails = carrierName ;
+                    String carrierName = telephonyManager.getNetworkOperatorName();
+                    String carrierId = telephonyManager.getNetworkOperator();
+                    carrierDetails = carrierName;
                     networkType = carrierId;
                 } else {
                     carrierDetails = "Mobile Data - Carrier Unknown";
@@ -53,14 +53,13 @@ public class NetworkChangeReceiver extends BroadcastReceiver {
                 }
             }
 
-
-            // Trigger callback with the ContextModel, network type, and carrier details
-            callback.onNetworkChange(carrierDetails, networkType);
+            // ✅ Pass internet availability in the callback
+            callback.onNetworkChange(carrierDetails, networkType, isInternetAvailable);
         }
     }
 
     // Callback interface for notifying the network change with all data
     public interface NetworkChangeCallback {
-        void onNetworkChange(String carrierName, String carrierID);
+        void onNetworkChange(String carrierName, String carrierID, boolean isInternetAvailable);
     }
 }

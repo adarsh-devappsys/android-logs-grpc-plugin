@@ -1,22 +1,27 @@
-package com.devappsys.logs_grpc.local_datasouce;
+package com.devappsys.grpc_logs.api.local_datasouce;
 
 import android.content.Context;
 
-import androidx.work.Constraints;
-import androidx.work.ExistingWorkPolicy;
-import androidx.work.NetworkType;
-import androidx.work.OneTimeWorkRequest;
-import androidx.work.WorkManager;
+import com.devappsys.log.Event;
+import com.devappsys.log.Log;
 
-import com.devappsys.logs_grpc.models.data.ContextModel;
-import com.devappsys.logs_grpc.models.data.EventModel;
-import com.devappsys.logs_grpc.models.data.LogModel;
-import com.devappsys.logs_grpc.worker.UploadWorker;
 
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import com.devappsys.grpc_logs.api.data_models.LogModel;
+import com.devappsys.grpc_logs.api.data_models.EventModel;
+import com.devappsys.grpc_logs.api.data_models.ContextModel;
+import com.google.protobuf.CodedInputStream;
 
 public class FileDatasourceImpl implements LocalDatasourceRepo {
 
@@ -28,7 +33,6 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     private static final String LOG_FILE = "logs_data.dat";
     private static final String EVENT_FILE = "events_data.dat";
     private static final String CONTEXT_FILE = "contexts_data.dat";
-    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
 
     private final Context mContext;
 
@@ -91,9 +95,6 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveLog(LogModel logModel) {
         try {
-            if (getLogFile().length() >= MAX_FILE_SIZE) {
-                rotateLogsFile();
-            }
             logOutputStream.write(logModel.toProtobuf().toByteArray());
             logOutputStream.flush();
         } catch (IOException e) {
@@ -104,9 +105,6 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveEvent(EventModel eventModel) {
         try {
-            if (getEventFile().length() >= MAX_FILE_SIZE) {
-                rotateEventFile();
-            }
             eventOutputStream.write(eventModel.toProtobuf().toByteArray());
             eventOutputStream.flush();
         } catch (IOException e) {
@@ -117,9 +115,6 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveContext(ContextModel contextModel) {
         try {
-            if (getContextFile().length() >= MAX_FILE_SIZE) {
-                rotateContextsFile();
-            }
             contextOutputStream.write(contextModel.toProtobuf().toByteArray());
             contextOutputStream.flush();
         } catch (IOException e) {
@@ -253,27 +248,159 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     }
 
     @Override
+    public long getLogsCount() {
+        List<File> files = new ArrayList<>(getLogsFile()); // rotated files
+//        files.add(getLogFile());                           // current active file
+        return countProtobufMessages(files, Log.LogMessage.parser());
+    }
+
+    @Override
+    public long getEventsCount() {
+        List<File> files = new ArrayList<>(getEventsFile());
+//        files.add(getEventFile());
+        return countProtobufMessages(files, Event.EventMessage.parser());
+    }
+
+    @Override
+    public long getContextsCount() {
+        List<File> files = new ArrayList<>(getContextsFile());
+//        files.add(getContextFile());
+        return countProtobufMessages(files, com.devappsys.log.Context.ContextMessage.parser());
+    }
+
+    // === Generic parser for any protobuf list ===
+    private <T extends com.google.protobuf.Message> long countProtobufMessages(List<File> files, com.google.protobuf.Parser<T> parser) {
+        long count = 0;
+        for (File file : files) {
+            try (InputStream in = new FileInputStream(file)) {
+                CodedInputStream codedInput = CodedInputStream.newInstance(in);
+                while (!codedInput.isAtEnd()) {
+                    int length = codedInput.readRawVarint32(); // read message size
+                    codedInput.readRawBytes(length);           // skip message
+                    count++;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return count;
+    }
+
+    @Override
+    public Map<String, Log.LogBatch> getAllLogs() {
+        Map<String, Log.LogBatch> fileToLogBatchMap = new HashMap<>();
+        List<File> files = getLogsFile(); // Rotated log files
+
+        for (File file : files) {
+            List<Log.LogMessage> messages = new ArrayList<>();
+
+            try (FileInputStream fis = new FileInputStream(file)) {
+                CodedInputStream codedInput = CodedInputStream.newInstance(fis);
+                while (!codedInput.isAtEnd()) {
+                    int size = codedInput.readRawVarint32();
+                    byte[] data = codedInput.readRawBytes(size);
+                    Log.LogMessage logMessage = Log.LogMessage.parser().parseFrom(data);
+                    messages.add(logMessage);
+                }
+                Log.LogBatch batch = Log.LogBatch.newBuilder().addAllLogs(messages).build();
+                fileToLogBatchMap.put(file.getName(), batch);
+            } catch (IOException e) {
+                e.printStackTrace(); // Handle errors properly
+            }
+        }
+
+        return fileToLogBatchMap;
+    }
+
+    @Override
+    public Map<String, Event.EventBatch> getAllEvents() {
+        Map<String, Event.EventBatch> fileToEventBatchMap = new HashMap<>();
+        List<File> files = getEventsFile(); // Rotated event files
+
+        for (File file : files) {
+            List<Event.EventMessage> messages = new ArrayList<>();
+
+            try (FileInputStream fis = new FileInputStream(file)) {
+                CodedInputStream codedInput = CodedInputStream.newInstance(fis);
+                while (!codedInput.isAtEnd()) {
+                    int size = codedInput.readRawVarint32();
+                    byte[] data = codedInput.readRawBytes(size);
+                    Event.EventMessage event = Event.EventMessage.parser().parseFrom(data);
+                    messages.add(event);
+                }
+                Event.EventBatch batch = Event.EventBatch.newBuilder().addAllEvents(messages).build();
+                fileToEventBatchMap.put(file.getName(), batch);
+            } catch (IOException e) {
+                e.printStackTrace(); // Handle as needed
+            }
+        }
+
+        return fileToEventBatchMap;
+    }
+    @Override
+    public Map<String, com.devappsys.log.Context.ContextBatch> getAllContexts() {
+        Map<String, com.devappsys.log.Context.ContextBatch> fileToContextBatchMap = new HashMap<>();
+        List<File> files = getContextsFile(); // Rotated context files
+
+        for (File file : files) {
+            List<com.devappsys.log.Context.ContextMessage> messages = new ArrayList<>();
+
+            try (FileInputStream fis = new FileInputStream(file)) {
+                CodedInputStream codedInput = CodedInputStream.newInstance(fis);
+                while (!codedInput.isAtEnd()) {
+                    int size = codedInput.readRawVarint32();
+                    byte[] data = codedInput.readRawBytes(size);
+                    com.devappsys.log.Context.ContextMessage context =
+                            com.devappsys.log.Context.ContextMessage.parser().parseFrom(data);
+                    messages.add(context);
+                }
+                com.devappsys.log.Context.ContextBatch batch =
+                        com.devappsys.log.Context.ContextBatch.newBuilder().addAllContexts(messages).build();
+                fileToContextBatchMap.put(file.getName(), batch);
+            } catch (IOException e) {
+                e.printStackTrace(); // Handle properly
+            }
+        }
+
+        return fileToContextBatchMap;
+    }
+
+
+    private <T extends com.google.protobuf.Message> List<T> parseMessages(
+            List<File> files,
+            com.google.protobuf.Parser<T> parser
+    ) {
+        List<T> messages = new ArrayList<>();
+        List<File> allFiles = new ArrayList<>(files);
+
+        for (File file : allFiles) {
+            try (FileInputStream fis = new FileInputStream(file)) {
+                CodedInputStream codedInput = CodedInputStream.newInstance(fis);
+                while (!codedInput.isAtEnd()) {
+                    int size = codedInput.readRawVarint32();
+                    byte[] data = codedInput.readRawBytes(size);
+                    T message = parser.parseFrom(data);
+                    messages.add(message);
+                }
+            } catch (IOException e) {
+                e.printStackTrace(); // Log it properly in production
+            }
+        }
+        return messages;
+    }
+    @Override
     public void rotateEmergency() {
         try {
             rotateContextsFile();
             rotateLogsFile();
-            rotateEventFile();
-            startWorker();
+            rotateEventsFile();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
-    private void startWorker() {
-        WorkManager.getInstance(mContext).enqueueUniqueWork(
-                "UploadWorkerJob",  // Unique work name
-                ExistingWorkPolicy.KEEP, // Don't enqueue if one is already running or enqueued
-                new OneTimeWorkRequest.Builder(UploadWorker.class)
-                        .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                        .build()
-        );
-    }
 
-    private void rotateEventFile() throws IOException {
+    @Override
+    public void rotateEventsFile() throws IOException {
         if (eventOutputStream != null) {
             eventOutputStream.close();
         }
@@ -284,11 +411,11 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         current.renameTo(renamed);
 
         eventOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
-        startWorker();
+
 
     }
 
-    private void rotateLogsFile()throws IOException{
+    public void rotateLogsFile() throws IOException {
         if (logOutputStream != null) {
             logOutputStream.close();
         }
@@ -299,11 +426,11 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         current.renameTo(renamed);
 
         logOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
-        startWorker();
+
 
     }
 
-    private void rotateContextsFile()throws IOException{
+    public void rotateContextsFile()throws IOException{
         if (contextOutputStream != null) {
             contextOutputStream.close();
         }
@@ -314,7 +441,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         current.renameTo(renamed);
 
         contextOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
-        startWorker();
+
 
     }
 }

@@ -1,39 +1,34 @@
-package com.devappsys.logs_grpc.models.data;
+package com.devappsys.grpc_logs.api.data_models;
+import androidx.annotation.NonNull;
 
 import com.devappsys.log.Log;
 import com.google.protobuf.Timestamp;
+
+import java.util.Map;
 
 public class LogModel {
 
     private String logID;
     private int level; // LogLevel enum value
-    private int type; // LogType enum value
+
+    private String contextID;
     private String message;
     private String stackTrace;
-    private String sessionID;
     private Timestamp loggedAt; // This will be a timestamp from Protobuf
-    private double freeRAMMB;
-    private String deviceModel;
-    private String deviceOS;
-    private String deviceOSVersion;
+    Map<String,Object> logProperties ;
 
     // Default constructor
     public LogModel() {}
 
     // Constructor with all fields
-    public LogModel( int level, int type, String message, String stackTrace,
-                    String sessionID, Timestamp loggedAt, double freeRAMMB, String deviceModel, String deviceOS, String deviceOSVersion) {
+    public LogModel( int level, String contextID, String message, String stackTrace, Timestamp loggedAt, Map<String,Object> logProperties) {
         this.logID = java.util.UUID.randomUUID().toString(); // Generate a unique log ID
         this.level = level;
-        this.type = type;
+        this.contextID = contextID;
         this.message = message;
         this.stackTrace = stackTrace;
-        this.sessionID = sessionID;
         this.loggedAt = loggedAt;
-        this.freeRAMMB = freeRAMMB;
-        this.deviceModel = deviceModel;
-        this.deviceOS = deviceOS;
-        this.deviceOSVersion = deviceOSVersion;
+        this.logProperties=logProperties;
     }
 
     /**
@@ -45,20 +40,28 @@ public class LogModel {
         Log.LogMessage.Builder logMessageBuilder = Log.LogMessage.newBuilder();
 
         // Map fields from LogModel to LogMessage
-        logMessageBuilder.setLogID(this.logID)
+        logMessageBuilder.setUuid(this.logID)
                 .setLevel(Log.LogLevel.forNumber(this.level)) // Map int to LogLevel enum
-                .setType(Log.LogType.forNumber(this.type)) // Map int to LogType enum
+                .setContextId(this.contextID) // Map int to LogType enum
                 .setMessage(this.message)
                 .setStackTrace(this.stackTrace)
-                .setSessionID(this.sessionID)
                 .setLoggedAt(this.loggedAt)
-                .setFreeRAMMB(this.freeRAMMB)
-                .setDeviceModel(this.deviceModel)
-                .setDeviceOS(this.deviceOS)
-                .setDeviceOSVersion(this.deviceOSVersion);
+                .putAllLogProperties(this.getLogPropertiesToMap());
+
 
         // Return the built LogMessage object
         return logMessageBuilder.build();
+    }
+
+    private Map<String, String> getLogPropertiesToMap() {
+        if (logProperties == null || logProperties.isEmpty()) {
+            return new java.util.HashMap<>();
+        }
+        Map<String, String> logPropertiesMap = new java.util.HashMap<>();
+        for (Map.Entry<String, Object> entry : logProperties.entrySet()) {
+            logPropertiesMap.put(entry.getKey(), entry.getValue().toString());
+        }
+        return logPropertiesMap;
     }
 
     // Getters and setters for each field
@@ -79,14 +82,6 @@ public class LogModel {
         this.level = level;
     }
 
-    public int getType() {
-        return type;
-    }
-
-    public void setType(int type) {
-        this.type = type;
-    }
-
     public String getMessage() {
         return message;
     }
@@ -103,13 +98,6 @@ public class LogModel {
         this.stackTrace = stackTrace;
     }
 
-    public String getSessionID() {
-        return sessionID;
-    }
-
-    public void setSessionID(String sessionID) {
-        this.sessionID = sessionID;
-    }
 
     public Timestamp getLoggedAt() {
         return loggedAt;
@@ -119,53 +107,21 @@ public class LogModel {
         this.loggedAt = loggedAt;
     }
 
-    public double getFreeRAMMB() {
-        return freeRAMMB;
-    }
 
-    public void setFreeRAMMB(double freeRAMMB) {
-        this.freeRAMMB = freeRAMMB;
-    }
 
-    public String getDeviceModel() {
-        return deviceModel;
-    }
-
-    public void setDeviceModel(String deviceModel) {
-        this.deviceModel = deviceModel;
-    }
-
-    public String getDeviceOS() {
-        return deviceOS;
-    }
-
-    public void setDeviceOS(String deviceOS) {
-        this.deviceOS = deviceOS;
-    }
-
-    public String getDeviceOSVersion() {
-        return deviceOSVersion;
-    }
-
-    public void setDeviceOSVersion(String deviceOSVersion) {
-        this.deviceOSVersion = deviceOSVersion;
-    }
 
     // Optional: Override toString for easier logging/printing
+    @NonNull
     @Override
     public String toString() {
         return "LogModel{" +
                 "logID='" + logID + '\'' +
                 ", level=" + level +
-                ", type=" + type +
+                ", contextID=" + contextID +
                 ", message='" + message + '\'' +
                 ", stackTrace='" + stackTrace + '\'' +
-                ", sessionID='" + sessionID + '\'' +
                 ", loggedAt=" + loggedAt +
-                ", freeRAMMB=" + freeRAMMB +
-                ", deviceModel='" + deviceModel + '\'' +
-                ", deviceOS='" + deviceOS + '\'' +
-                ", deviceOSVersion='" + deviceOSVersion + '\'' +
+                ", logProperties=" + logProperties.toString() +
                 '}';
     }
 }
