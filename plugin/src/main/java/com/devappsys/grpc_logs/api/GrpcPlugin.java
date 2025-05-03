@@ -38,7 +38,7 @@ public class GrpcPlugin {
     protected Context context;
     private final String sessionId;
     private final Configuration configuration;
-    private final String sdkVersion = "1.0.0";
+    private final String sdkVersion = "SDK_VERSION";
     AtomicInteger logCounter = new AtomicInteger(0);
     AtomicInteger eventCounter = new AtomicInteger(0);
     /**
@@ -70,12 +70,18 @@ public class GrpcPlugin {
         this.sessionId = sessionId;
         this.configuration = configuration;
         this.deviceInfo = new DeviceInfo(context);
+        contextModel = new ContextModel(sessionId, configuration.getUserId(), configuration.getDeviceId(), EmulatorUtil.isEmulator() ? "Emulator" : "device", deviceInfo.getManufacturer(), deviceInfo.getCarrier(), deviceInfo.getBrand(), deviceInfo.getOsName(), deviceInfo.getOsVersion(), configuration.getAppId(), deviceInfo.getVersionName(), deviceInfo.getOsVersion(), sdkVersion, "en", IPUtil.getIPAddress(true), "", "", "", 0, 0);
         logThread.start();
         networkThread.start();
         refreshContextInternal();
         NetworkChangeReceiver networkChangeReceiver = new NetworkChangeReceiver((carrierName, carrierId, networkAvailable) -> {
             this.isNetworkAvailable = networkAvailable;
             refreshContextInternal();
+            if (networkAvailable) {
+                flushEvents();
+                flushLogs();
+                flushContext();
+            }
         });
         IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         context.registerReceiver(networkChangeReceiver, filter);
@@ -184,6 +190,17 @@ public class GrpcPlugin {
         }
     }
 
+    public void log(int level, String message, Map<String, Object> properties) {
+        logInternal(level, message, null, properties);
+    }
+
+    public void log(int level, String message, String stackTrace, Map<String, Object> properties) {
+        logInternal(level, message, stackTrace, properties);
+    }
+
+    public void logEvent(String eventType, String displayName, String message, Map<String, Object> customAttributes) {
+        logEventInternal(eventType, displayName, message, customAttributes);
+    }
     protected void logInternal(int level, String message, String stackTrace, Map<String, Object> logProperties) {
         Timestamp loggedTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();
         runOnLogThread(() -> {
@@ -203,8 +220,18 @@ public class GrpcPlugin {
                     networkThread.post(() -> {
                         try {
                             Map<String, Log.LogBatch> logBatches = localDatasourceRepo.getAllLogs();
+                            if (logBatches.isEmpty()) {
+                                logger.d("logInternal: logBatches is empty");
+                                return;
+                            }
+
                             for (Map.Entry<String, Log.LogBatch> entry : logBatches.entrySet()) {
                                 String fileName = entry.getKey(); // Prevent closure issue
+                                if (entry.getValue().getLogsList().isEmpty()) {
+                                    logger.d("logInternal: logBatches is empty");
+                                    localDatasourceRepo.deleteLogsFile(fileName);
+                                    continue;
+                                }
                                 grpcClientAsync.uploadLogs(entry.getValue(), new StreamObserver<>() {
                                     @Override
                                     public void onNext(Common.UploadResponse value) {
@@ -232,7 +259,6 @@ public class GrpcPlugin {
 
     protected void logEventInternal(String eventType, String displayName, String message, Map<String, Object> customAttributes) {
         Timestamp eventTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();
-        logger.d("logEventInternal: " + eventType + " " + displayName + " " + message);
         runOnLogThread(() -> {
             // Save the event locally
             EventModel eventModel = new EventModel(
@@ -244,15 +270,19 @@ public class GrpcPlugin {
                     customAttributes
             );
             localDatasourceRepo.saveEvent(eventModel);
-
+//            logger.d("logEventInternal: " + eventType + " " + displayName + " " + message);
+//
+//            logger.i( "log event count: " + eventCounter.get() + " " + eventModel.toString());
             // Check if we need to rotate and upload
             if (eventCounter.incrementAndGet() >= configuration.getBatchSize()) {
                 try {
                     localDatasourceRepo.rotateEventsFile();
                     eventCounter.set(0);
-                } catch (IOException ignored) {
+                } catch (IOException e) {
+                    logger.e("logEventInternal: " + " " + e.getMessage());
                 }
                 if (!isNetworkAvailable) {
+                    logger.w("logEventInternal: Network is not available");
                     return;
                 }
 
@@ -262,8 +292,22 @@ public class GrpcPlugin {
                         try {
                             Map<String, Event.EventBatch> eventBatches = localDatasourceRepo.getAllEvents();
 
+                            if (eventBatches.isEmpty()) {
+//                                logger.d("logEventInternal: eventBatches is empty");
+                                return;
+                            }
+
+//                            logger.i("logEventInternal: eventBatches size: " + eventBatches.size());
                             for (Map.Entry<String, Event.EventBatch> entry : eventBatches.entrySet()) {
+
+//                                logger.i("logEventInternal: fileName: " + entry.getKey());
+//                                logger.i("logEventInternal: eventBatch size: " + entry.getValue().getEventsList().size());
                                 String fileName = entry.getKey(); // Avoid closure issues
+                                if(entry.getValue().getEventsList().isEmpty()) {
+                                    localDatasourceRepo.deleteEventsFile(fileName);
+                                    logger.d("logEventInternal: eventBatches is empty for file: " + fileName + " deleting file");
+                                    continue;
+                                }
                                 grpcClientAsync.uploadEvents(entry.getValue(), new StreamObserver<>() {
                                     @Override
                                     public void onNext(Common.UploadResponse value) {
@@ -293,8 +337,8 @@ public class GrpcPlugin {
     protected void logContextInternal() {
         runOnLogThread(() -> {
             contextModel = new ContextModel(sessionId, configuration.getUserId(), configuration.getDeviceId(), EmulatorUtil.isEmulator() ? "Emulator" : "device", deviceInfo.getManufacturer(), deviceInfo.getCarrier(), deviceInfo.getBrand(), deviceInfo.getOsName(), deviceInfo.getOsVersion(), configuration.getAppId(), deviceInfo.getVersionName(), deviceInfo.getOsVersion(), sdkVersion, "en", IPUtil.getIPAddress(true), "", "", "", 0, 0);
-            localDatasourceRepo.saveContext(contextModel);
             if (!isNetworkAvailable) {
+                localDatasourceRepo.saveContext(contextModel);
                 return;
             }
             if (contextUploading.compareAndSet(false, true)) {
@@ -326,8 +370,159 @@ public class GrpcPlugin {
         if (instance == null) {
             return;
         }
-
         instance.logEventInternal(eventType, activityName, eventType + " " + activityName, null);
+    }
+
+    public void flushEvents() {
+        runOnLogThread(() -> {
+            try {
+                if (localDatasourceRepo.getEventsCount() == 0) {
+                    return;
+                }
+
+                localDatasourceRepo.rotateEventsFile();
+                eventCounter.set(0);
+            } catch (IOException ignored) {
+                // Consider logging the exception if needed
+            }
+
+            if (!isNetworkAvailable || eventsUploading.get()) {
+                return;
+            }
+
+            if (eventsUploading.compareAndSet(false, true)) {
+                networkThread.post(() -> {
+                    try {
+                        Map<String, Event.EventBatch> eventBatches = localDatasourceRepo.getAllEvents();
+
+                        if (eventBatches.isEmpty()) {
+//                                logger.d("logEventInternal: eventBatches is empty");
+                            return;
+                        }
+
+//                            logger.i("logEventInternal: eventBatches size: " + eventBatches.size());
+                        for (Map.Entry<String, Event.EventBatch> entry : eventBatches.entrySet()) {
+
+//                                logger.i("logEventInternal: fileName: " + entry.getKey());
+//                                logger.i("logEventInternal: eventBatch size: " + entry.getValue().getEventsList().size());
+                            String fileName = entry.getKey(); // Avoid closure issues
+                            if(entry.getValue().getEventsList().isEmpty()) {
+                                localDatasourceRepo.deleteEventsFile(fileName);
+                                logger.d("logEventInternal: eventBatches is empty for file: " + fileName + " deleting file");
+                                continue;
+                            }
+                            grpcClientAsync.uploadEvents(entry.getValue(), new StreamObserver<>() {
+                                @Override
+                                public void onNext(Common.UploadResponse value) {
+                                }
+
+                                @Override
+                                public void onError(Throwable t) {
+                                    t.printStackTrace(); // Optional: Add retry/backoff
+                                }
+
+                                @Override
+                                public void onCompleted() {
+                                    localDatasourceRepo.deleteEventsFile(fileName);
+                                }
+                            });
+                        }
+
+                    } finally {
+                        eventsUploading.set(false);
+                    }
+                });
+            }
+        });
+    }
+
+    public void flushContext() {
+       networkThread.post(()->{
+           try {
+               localDatasourceRepo.rotateContextsFile();
+           } catch (IOException e) {
+                logger.e("flushContext: " + e.getMessage());
+           }
+           Map<String, com.devappsys.log.Context.ContextBatch> contextBatches = localDatasourceRepo.getAllContexts();
+              if (contextBatches.isEmpty()) {
+                logger.d("flushContext: contextBatches is empty");
+                return;
+              }
+                for (Map.Entry<String, com.devappsys.log.Context.ContextBatch> entry : contextBatches.entrySet()) {
+                    String fileName = entry.getKey(); // Prevent closure issue
+                    if (entry.getValue().getContextsList().isEmpty()) {
+                        logger.d("flushContext: contextBatches is empty");
+                        localDatasourceRepo.deleteContextsFile(fileName);
+                        continue;
+                    }
+                    grpcClientAsync.uploadContexts(entry.getValue(), new StreamObserver<>() {
+                        @Override
+                        public void onNext(Common.UploadResponse value) {
+                        }
+
+                        @Override
+                        public void onError(Throwable t) {
+                            t.printStackTrace();
+                        }
+
+                        @Override
+                        public void onCompleted() {
+                            localDatasourceRepo.deleteContextsFile(fileName);
+                        }
+                    });
+                }
+       });
+    }
+    public void flushLogs() {
+        runOnLogThread(() -> {
+
+            if (localDatasourceRepo.getLogsCount() == 0) {
+                return;
+            }
+            try {
+                localDatasourceRepo.rotateLogsFile();
+                logCounter.set(0);
+            } catch (IOException ignored) {
+            }
+
+            if (!isNetworkAvailable || logsUploading.get()) {
+                return;
+            }
+
+            if (logsUploading.compareAndSet(false, true)) {
+                networkThread.post(() -> {
+                    try {
+                        Map<String, Log.LogBatch> logBatches = localDatasourceRepo.getAllLogs();
+
+                        for (Map.Entry<String, Log.LogBatch> entry : logBatches.entrySet()) {
+                            String fileName = entry.getKey();
+                            if (entry.getValue().getLogsList().isEmpty()) {
+                                logger.d("flushLogs: logBatches is empty");
+                                localDatasourceRepo.deleteLogsFile(fileName);
+                                continue;
+                            }
+                            grpcClientAsync.uploadLogs(entry.getValue(), new StreamObserver<>() {
+                                @Override
+                                public void onNext(Common.UploadResponse value) {
+                                }
+
+                                @Override
+                                public void onError(Throwable t) {
+                                    t.printStackTrace();
+                                }
+
+                                @Override
+                                public void onCompleted() {
+                                    localDatasourceRepo.deleteLogsFile(fileName);
+                                }
+                            });
+                        }
+                    } finally {
+                        logsUploading.set(false);
+                    }
+                });
+            }
+        });
     }
 
     private static class ActivityLifecycleCallbacks implements Application.ActivityLifecycleCallbacks {

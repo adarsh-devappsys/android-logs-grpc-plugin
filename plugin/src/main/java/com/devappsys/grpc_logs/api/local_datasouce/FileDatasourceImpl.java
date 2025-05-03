@@ -2,26 +2,16 @@ package com.devappsys.grpc_logs.api.local_datasouce;
 
 import android.content.Context;
 
+import com.devappsys.grpc_logs.util.Logger;
 import com.devappsys.log.Event;
 import com.devappsys.log.Log;
-
-
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import com.devappsys.grpc_logs.api.data_models.LogModel;
 import com.devappsys.grpc_logs.api.data_models.EventModel;
 import com.devappsys.grpc_logs.api.data_models.ContextModel;
 import com.google.protobuf.CodedInputStream;
+
+import java.io.*;
+import java.util.*;
 
 public class FileDatasourceImpl implements LocalDatasourceRepo {
 
@@ -30,9 +20,9 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     private static final String EVENT_DIR = "events";
     private static final String CONTEXT_DIR = "contexts";
 
-    private static final String LOG_FILE = "logs_data.dat";
-    private static final String EVENT_FILE = "events_data.dat";
-    private static final String CONTEXT_FILE = "contexts_data.dat";
+    private static final String LOG_FILE = "logs_data.bin";
+    private static final String EVENT_FILE = "events_data.bin";
+    private static final String CONTEXT_FILE = "contexts_data.bin";
 
     private final Context mContext;
 
@@ -41,6 +31,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     private BufferedOutputStream contextOutputStream;
 
     private static FileDatasourceImpl instance;
+    private  Logger logger;
 
     public static synchronized FileDatasourceImpl getInstance(Context context) {
         if (instance == null) {
@@ -48,8 +39,10 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         }
         return instance;
     }
+
     private FileDatasourceImpl(Context context) {
         this.mContext = context;
+        this.logger = new Logger(true);
         initStorage();
     }
 
@@ -76,26 +69,12 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         }
     }
 
-    private File getDir(String subDir) {
-        return new File(new File(mContext.getFilesDir(), ROOT_DIR), subDir);
-    }
-
-    private File getLogFile() {
-        return new File(getDir(LOG_DIR), LOG_FILE);
-    }
-
-    private File getEventFile() {
-        return new File(getDir(EVENT_DIR), EVENT_FILE);
-    }
-
-    private File getContextFile() {
-        return new File(getDir(CONTEXT_DIR), CONTEXT_FILE);
-    }
+    // === Method Implementations ===
 
     @Override
     public synchronized void saveLog(LogModel logModel) {
         try {
-            logOutputStream.write(logModel.toProtobuf().toByteArray());
+            logModel.toProtobuf().writeDelimitedTo(logOutputStream);
             logOutputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
@@ -105,7 +84,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveEvent(EventModel eventModel) {
         try {
-            eventOutputStream.write(eventModel.toProtobuf().toByteArray());
+           eventModel.toProtobuf().writeDelimitedTo(eventOutputStream);
             eventOutputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
@@ -115,7 +94,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveContext(ContextModel contextModel) {
         try {
-            contextOutputStream.write(contextModel.toProtobuf().toByteArray());
+           contextModel.toProtobuf().writeDelimitedTo(contextOutputStream);
             contextOutputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
@@ -123,7 +102,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     }
 
     @Override
-    public void cleanup(){
+    public synchronized void cleanup(){
         try {
             if (logOutputStream != null) {
                 logOutputStream.close();
@@ -139,6 +118,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         }
     }
 
+    // === Log/Events/Context Checking Methods ===
     @Override
     public boolean hasLogsToUpload() {
         File[] files = getDir(LOG_DIR).listFiles((dir, name) ->
@@ -163,65 +143,65 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public List<File> getLogsFile() {
         List<File> files = new ArrayList<>();
-
         File[] allFiles = getDir(LOG_DIR).listFiles((dir, name) ->
                 name.startsWith("logs_data_") && !name.equals(LOG_FILE));
-
         if (allFiles != null) {
             Collections.addAll(files, allFiles);
         }
-
         return files;
     }
 
     @Override
     public List<File> getEventsFile() {
         List<File> files = new ArrayList<>();
-
         File[] allFiles = getDir(EVENT_DIR).listFiles((dir, name) ->
                 name.startsWith("events_data_") && !name.equals(EVENT_FILE));
-
         if (allFiles != null) {
             Collections.addAll(files, allFiles);
         }
-
         return files;
     }
 
     @Override
     public List<File> getContextsFile() {
         List<File> files = new ArrayList<>();
-
         File[] allFiles = getDir(CONTEXT_DIR).listFiles((dir, name) ->
                 name.startsWith("contexts_data_") && !name.equals(CONTEXT_FILE));
-
         if (allFiles != null) {
             Collections.addAll(files, allFiles);
         }
-
         return files;
     }
 
     @Override
     public synchronized void deleteLogsFile(String fileName) {
-        new File(getDir(LOG_DIR), fileName).delete();
+        File logFile = new File(getDir(LOG_DIR), fileName);
+        if (logFile.exists()) {
+            logFile.delete();
+        }
     }
 
     @Override
     public synchronized void deleteEventsFile(String fileName) {
-        new File(getDir(EVENT_DIR), fileName).delete();
+        File eventFile = new File(getDir(EVENT_DIR), fileName);
+        if (eventFile.exists()) {
+            eventFile.delete();
+        }
     }
 
     @Override
     public synchronized void deleteContextsFile(String fileName) {
-        new File(getDir(CONTEXT_DIR), fileName).delete();
+        File contextFile = new File(getDir(CONTEXT_DIR), fileName);
+        if (contextFile.exists()) {
+            contextFile.delete();
+        }
     }
 
     @Override
     public void deleteAllLogs() {
-        File[] files = getDir(LOG_DIR).listFiles();
-        if (files != null) {
-            for (File file : files) {
+        File[] logFiles = getDir(LOG_DIR).listFiles();
+        if (logFiles != null) {
+            for (File file : logFiles) {
                 file.delete();
             }
         }
@@ -229,9 +209,9 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
 
     @Override
     public void deleteAllEvents() {
-        File[] files = getDir(EVENT_DIR).listFiles();
-        if (files != null) {
-            for (File file : files) {
+        File[] eventFiles = getDir(EVENT_DIR).listFiles();
+        if (eventFiles != null) {
+            for (File file : eventFiles) {
                 file.delete();
             }
         }
@@ -239,9 +219,9 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
 
     @Override
     public void deleteAllContexts() {
-        File[] files = getDir(CONTEXT_DIR).listFiles();
-        if (files != null) {
-            for (File file : files) {
+        File[] contextFiles = getDir(CONTEXT_DIR).listFiles();
+        if (contextFiles != null) {
+            for (File file : contextFiles) {
                 file.delete();
             }
         }
@@ -249,26 +229,196 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
 
     @Override
     public long getLogsCount() {
-        List<File> files = new ArrayList<>(getLogsFile()); // rotated files
-//        files.add(getLogFile());                           // current active file
+        List<File> files = new ArrayList<>(getLogsFile());
         return countProtobufMessages(files, Log.LogMessage.parser());
     }
 
     @Override
     public long getEventsCount() {
         List<File> files = new ArrayList<>(getEventsFile());
-//        files.add(getEventFile());
         return countProtobufMessages(files, Event.EventMessage.parser());
     }
 
     @Override
     public long getContextsCount() {
         List<File> files = new ArrayList<>(getContextsFile());
-//        files.add(getContextFile());
         return countProtobufMessages(files, com.devappsys.log.Context.ContextMessage.parser());
     }
 
-    // === Generic parser for any protobuf list ===
+    // === Rotation Methods ===
+    @Override
+    public void rotateEmergency() {
+        try {
+            rotateContextsFile();
+            rotateLogsFile();
+            rotateEventsFile();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void rotateLogsFile() throws IOException {
+        if (logOutputStream != null) {
+            logOutputStream.close();
+        }
+
+        // check if file size is empty if so dont rotate
+        if (getLogFile().length() == 0) {
+            return;
+        }
+        File current = getLogFile();
+        String newName = "logs_data_" + System.currentTimeMillis() + ".bin";
+        File renamed = new File(getDir(LOG_DIR), newName);
+        current.renameTo(renamed);
+
+        logOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+    }
+
+    @Override
+    public void rotateEventsFile() throws IOException {
+        if (eventOutputStream != null) {
+            eventOutputStream.close();
+        }
+        // check if file size is empty if so dont rotate
+        if (getEventFile().length() == 0) {
+//            logger.d("Event file is empty, not rotating.");
+            return;
+        }
+
+        File current = getEventFile();
+        String newName = "events_data_" + System.currentTimeMillis() + ".bin";
+        File renamed = new File(getDir(EVENT_DIR), newName);
+        current.renameTo(renamed);
+//        logger.d("Rotating event file: " + current.getAbsolutePath() + " to " + renamed.getAbsolutePath());
+
+        eventOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+    }
+
+    @Override
+    public void rotateContextsFile() throws IOException {
+        if (contextOutputStream != null) {
+            contextOutputStream.close();
+        }
+
+        // check if file size is empty if so dont rotate
+        if (getContextFile().length() == 0) {
+            return;
+        }
+
+        File current = getContextFile();
+        String newName = "contexts_data_" + System.currentTimeMillis() + ".bin";
+        File renamed = new File(getDir(CONTEXT_DIR), newName);
+        current.renameTo(renamed);
+
+        contextOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+    }
+
+    @Override
+    public Map<String, Log.LogBatch> getAllLogs() {
+        Map<String, Log.LogBatch> logBatchMap = new HashMap<>();
+
+        File logsDir = getDir(LOG_DIR);  // Fix: define the directory first
+
+        if (!logsDir.exists() || !logsDir.isDirectory()) {
+            return logBatchMap;
+        }
+
+        File[] files = logsDir.listFiles((dir, name) -> name.startsWith("logs_data_") && !name.equals(LOG_FILE));
+        if (files == null) return logBatchMap;
+
+        for (File file : files) {
+            try (FileInputStream fis = new FileInputStream(file)) {
+                Log.LogBatch.Builder builder = Log.LogBatch.newBuilder();
+                Log.LogMessage log;
+                while ((log = Log.LogMessage.parseDelimitedFrom(fis)) != null) {
+                    builder.addLogs(log);
+                }
+                logBatchMap.put(file.getName(), builder.build());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return logBatchMap;
+    }
+
+    @Override
+    public Map<String, Event.EventBatch> getAllEvents() {
+        Map<String, Event.EventBatch> eventBatchMap = new HashMap<>();
+
+        File eventsDir = getDir(EVENT_DIR);  // Fix: define the directory first
+
+        if (!eventsDir.exists() || !eventsDir.isDirectory()) {
+            return eventBatchMap;
+        }
+
+        File[] files = eventsDir.listFiles((dir, name) -> name.startsWith("events_data_") && !name.equals(EVENT_FILE));
+        if (files == null) return eventBatchMap;
+
+        for (File file : files) {
+            try (FileInputStream fis = new FileInputStream(file)) {
+                Event.EventBatch.Builder builder = Event.EventBatch.newBuilder();
+                Event.EventMessage event;
+                while ((event = Event.EventMessage.parseDelimitedFrom(fis)) != null) {
+                    builder.addEvents(event);
+                }
+                eventBatchMap.put(file.getName(), builder.build());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return eventBatchMap;
+    }
+
+    @Override
+    public Map<String, com.devappsys.log.Context.ContextBatch> getAllContexts() {
+        Map<String, com.devappsys.log.Context.ContextBatch> contextBatchMap = new HashMap<>();
+
+        File contextsDir = getDir(CONTEXT_DIR);  // Fix: define the directory first
+
+        if (!contextsDir.exists() || !contextsDir.isDirectory()) {
+            return contextBatchMap;
+        }
+
+        File[] files = contextsDir.listFiles((dir, name) -> name.startsWith("contexts_data_") && !name.equals(CONTEXT_FILE));
+        if (files == null) return contextBatchMap;
+
+        for (File file : files) {
+            try (FileInputStream fis = new FileInputStream(file)) {
+                com.devappsys.log.Context.ContextBatch.Builder builder = com.devappsys.log.Context.ContextBatch.newBuilder();
+                com.devappsys.log.Context.ContextMessage context;
+                while ((context = com.devappsys.log.Context.ContextMessage.parseDelimitedFrom(fis)) != null) {
+                    builder.addContexts(context);
+                }
+                contextBatchMap.put(file.getName(), builder.build());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return contextBatchMap;
+    }
+
+    // === Helper Methods ===
+    private File getDir(String subDir) {
+        return new File(new File(mContext.getFilesDir(), ROOT_DIR), subDir);
+    }
+
+    private File getLogFile() {
+        return new File(getDir(LOG_DIR), LOG_FILE);
+    }
+
+    private File getEventFile() {
+        return new File(getDir(EVENT_DIR), EVENT_FILE);
+    }
+
+    private File getContextFile() {
+        return new File(getDir(CONTEXT_DIR), CONTEXT_FILE);
+    }
+
+    // === Protobuf Parsing Helper ===
     private <T extends com.google.protobuf.Message> long countProtobufMessages(List<File> files, com.google.protobuf.Parser<T> parser) {
         long count = 0;
         for (File file : files) {
@@ -284,164 +434,5 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
             }
         }
         return count;
-    }
-
-    @Override
-    public Map<String, Log.LogBatch> getAllLogs() {
-        Map<String, Log.LogBatch> fileToLogBatchMap = new HashMap<>();
-        List<File> files = getLogsFile(); // Rotated log files
-
-        for (File file : files) {
-            List<Log.LogMessage> messages = new ArrayList<>();
-
-            try (FileInputStream fis = new FileInputStream(file)) {
-                CodedInputStream codedInput = CodedInputStream.newInstance(fis);
-                while (!codedInput.isAtEnd()) {
-                    int size = codedInput.readRawVarint32();
-                    byte[] data = codedInput.readRawBytes(size);
-                    Log.LogMessage logMessage = Log.LogMessage.parser().parseFrom(data);
-                    messages.add(logMessage);
-                }
-                Log.LogBatch batch = Log.LogBatch.newBuilder().addAllLogs(messages).build();
-                fileToLogBatchMap.put(file.getName(), batch);
-            } catch (IOException e) {
-                e.printStackTrace(); // Handle errors properly
-            }
-        }
-
-        return fileToLogBatchMap;
-    }
-
-    @Override
-    public Map<String, Event.EventBatch> getAllEvents() {
-        Map<String, Event.EventBatch> fileToEventBatchMap = new HashMap<>();
-        List<File> files = getEventsFile(); // Rotated event files
-
-        for (File file : files) {
-            List<Event.EventMessage> messages = new ArrayList<>();
-
-            try (FileInputStream fis = new FileInputStream(file)) {
-                CodedInputStream codedInput = CodedInputStream.newInstance(fis);
-                while (!codedInput.isAtEnd()) {
-                    int size = codedInput.readRawVarint32();
-                    byte[] data = codedInput.readRawBytes(size);
-                    Event.EventMessage event = Event.EventMessage.parser().parseFrom(data);
-                    messages.add(event);
-                }
-                Event.EventBatch batch = Event.EventBatch.newBuilder().addAllEvents(messages).build();
-                fileToEventBatchMap.put(file.getName(), batch);
-            } catch (IOException e) {
-                e.printStackTrace(); // Handle as needed
-            }
-        }
-
-        return fileToEventBatchMap;
-    }
-    @Override
-    public Map<String, com.devappsys.log.Context.ContextBatch> getAllContexts() {
-        Map<String, com.devappsys.log.Context.ContextBatch> fileToContextBatchMap = new HashMap<>();
-        List<File> files = getContextsFile(); // Rotated context files
-
-        for (File file : files) {
-            List<com.devappsys.log.Context.ContextMessage> messages = new ArrayList<>();
-
-            try (FileInputStream fis = new FileInputStream(file)) {
-                CodedInputStream codedInput = CodedInputStream.newInstance(fis);
-                while (!codedInput.isAtEnd()) {
-                    int size = codedInput.readRawVarint32();
-                    byte[] data = codedInput.readRawBytes(size);
-                    com.devappsys.log.Context.ContextMessage context =
-                            com.devappsys.log.Context.ContextMessage.parser().parseFrom(data);
-                    messages.add(context);
-                }
-                com.devappsys.log.Context.ContextBatch batch =
-                        com.devappsys.log.Context.ContextBatch.newBuilder().addAllContexts(messages).build();
-                fileToContextBatchMap.put(file.getName(), batch);
-            } catch (IOException e) {
-                e.printStackTrace(); // Handle properly
-            }
-        }
-
-        return fileToContextBatchMap;
-    }
-
-
-    private <T extends com.google.protobuf.Message> List<T> parseMessages(
-            List<File> files,
-            com.google.protobuf.Parser<T> parser
-    ) {
-        List<T> messages = new ArrayList<>();
-        List<File> allFiles = new ArrayList<>(files);
-
-        for (File file : allFiles) {
-            try (FileInputStream fis = new FileInputStream(file)) {
-                CodedInputStream codedInput = CodedInputStream.newInstance(fis);
-                while (!codedInput.isAtEnd()) {
-                    int size = codedInput.readRawVarint32();
-                    byte[] data = codedInput.readRawBytes(size);
-                    T message = parser.parseFrom(data);
-                    messages.add(message);
-                }
-            } catch (IOException e) {
-                e.printStackTrace(); // Log it properly in production
-            }
-        }
-        return messages;
-    }
-    @Override
-    public void rotateEmergency() {
-        try {
-            rotateContextsFile();
-            rotateLogsFile();
-            rotateEventsFile();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    @Override
-    public void rotateEventsFile() throws IOException {
-        if (eventOutputStream != null) {
-            eventOutputStream.close();
-        }
-
-        File current = getEventFile();
-        String newName = "events_data_" + System.currentTimeMillis() + ".dat";
-        File renamed = new File(getDir(EVENT_DIR), newName);
-        current.renameTo(renamed);
-
-        eventOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
-
-
-    }
-
-    public void rotateLogsFile() throws IOException {
-        if (logOutputStream != null) {
-            logOutputStream.close();
-        }
-
-        File current = getLogFile();
-        String newName = "logs_data_" + System.currentTimeMillis() + ".dat";
-        File renamed = new File(getDir(LOG_DIR), newName);
-        current.renameTo(renamed);
-
-        logOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
-
-
-    }
-
-    public void rotateContextsFile()throws IOException{
-        if (contextOutputStream != null) {
-            contextOutputStream.close();
-        }
-
-        File current = getContextFile();
-        String newName = "contexts_data_" + System.currentTimeMillis() + ".dat";
-        File renamed = new File(getDir(CONTEXT_DIR), newName);
-        current.renameTo(renamed);
-
-        contextOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
-
-
     }
 }

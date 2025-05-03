@@ -121,7 +121,6 @@ public class LogModel {
                 ", message='" + message + '\'' +
                 ", stackTrace='" + stackTrace + '\'' +
                 ", loggedAt=" + loggedAt +
-                ", logProperties=" + logProperties.toString() +
                 '}';
     }
 }
