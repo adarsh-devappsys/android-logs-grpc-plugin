@@ -74,8 +74,10 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveLog(LogModel logModel) {
         try {
+            if (logOutputStream == null) {
+                logOutputStream = new BufferedOutputStream(new FileOutputStream(getLogFile(), true));
+            }
             logModel.toProtobuf().writeDelimitedTo(logOutputStream);
-            logOutputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -84,8 +86,10 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveEvent(EventModel eventModel) {
         try {
+            if (eventOutputStream == null) {
+                eventOutputStream = new BufferedOutputStream(new FileOutputStream(getEventFile(), true));
+            }
            eventModel.toProtobuf().writeDelimitedTo(eventOutputStream);
-            eventOutputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -94,8 +98,10 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     @Override
     public synchronized void saveContext(ContextModel contextModel) {
         try {
+            if (contextOutputStream == null) {
+                contextOutputStream = new BufferedOutputStream(new FileOutputStream(getContextFile(), true));
+            }
            contextModel.toProtobuf().writeDelimitedTo(contextOutputStream);
-            contextOutputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -142,58 +148,40 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
 
     @Override
     public List<File> getLogsFile() {
-        List<File> files = new ArrayList<>();
-        File[] allFiles = getDir(LOG_DIR).listFiles((dir, name) ->
-                name.startsWith("logs_data_") && !name.equals(LOG_FILE));
-        if (allFiles != null) {
-            Collections.addAll(files, allFiles);
-        }
-        return files;
+        return getFilesFromDir(LOG_DIR, "logs_data_", LOG_FILE);
     }
 
     @Override
     public List<File> getEventsFile() {
-        List<File> files = new ArrayList<>();
-        File[] allFiles = getDir(EVENT_DIR).listFiles((dir, name) ->
-                name.startsWith("events_data_") && !name.equals(EVENT_FILE));
-        if (allFiles != null) {
-            Collections.addAll(files, allFiles);
-        }
-        return files;
+        return getFilesFromDir(EVENT_DIR, "events_data_", EVENT_FILE);
     }
 
     @Override
     public List<File> getContextsFile() {
-        List<File> files = new ArrayList<>();
-        File[] allFiles = getDir(CONTEXT_DIR).listFiles((dir, name) ->
-                name.startsWith("contexts_data_") && !name.equals(CONTEXT_FILE));
-        if (allFiles != null) {
-            Collections.addAll(files, allFiles);
-        }
-        return files;
+        return getFilesFromDir(CONTEXT_DIR, "contexts_data_", CONTEXT_FILE);
     }
 
     @Override
     public synchronized void deleteLogsFile(String fileName) {
         File logFile = new File(getDir(LOG_DIR), fileName);
-        if (logFile.exists()) {
-            logFile.delete();
+        if (logFile.exists()&&!logFile.delete()) {
+            logger.e("Failed to delete log file: " + fileName);
         }
     }
 
     @Override
     public synchronized void deleteEventsFile(String fileName) {
         File eventFile = new File(getDir(EVENT_DIR), fileName);
-        if (eventFile.exists()) {
-            eventFile.delete();
+       if (eventFile.exists() && !eventFile.delete()) {
+            logger.e("Failed to delete event file: " + fileName);
         }
     }
 
     @Override
     public synchronized void deleteContextsFile(String fileName) {
         File contextFile = new File(getDir(CONTEXT_DIR), fileName);
-        if (contextFile.exists()) {
-            contextFile.delete();
+        if (contextFile.exists() && !contextFile.delete()) {
+            logger.e("Failed to delete context file: " + fileName);
         }
     }
 
@@ -258,21 +246,24 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     }
 
     @Override
-    public void rotateLogsFile() throws IOException {
+    public synchronized void rotateLogsFile() throws IOException {
         if (logOutputStream != null) {
             logOutputStream.close();
         }
 
-        // check if file size is empty if so dont rotate
-        if (getLogFile().length() == 0) {
+        File current = getLogFile();
+        if (current.length() == 0) {
+            logOutputStream = new BufferedOutputStream(new FileOutputStream(current, true));
             return;
         }
-        File current = getLogFile();
+
         String newName = "logs_data_" + System.currentTimeMillis() + ".bin";
         File renamed = new File(getDir(LOG_DIR), newName);
-        current.renameTo(renamed);
-
-        logOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+        if (current.renameTo(renamed)) {
+            logOutputStream = new BufferedOutputStream(new FileOutputStream(current, false));
+        } else {
+            throw new IOException("Failed to rotate log file");
+        }
     }
 
     @Override
@@ -280,19 +271,20 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         if (eventOutputStream != null) {
             eventOutputStream.close();
         }
-        // check if file size is empty if so dont rotate
-        if (getEventFile().length() == 0) {
-//            logger.d("Event file is empty, not rotating.");
-            return;
-        }
 
         File current = getEventFile();
+        if (current.length() == 0) {
+            eventOutputStream = new BufferedOutputStream(new FileOutputStream(current, true));
+            return;
+        }
         String newName = "events_data_" + System.currentTimeMillis() + ".bin";
         File renamed = new File(getDir(EVENT_DIR), newName);
-        current.renameTo(renamed);
-//        logger.d("Rotating event file: " + current.getAbsolutePath() + " to " + renamed.getAbsolutePath());
+        if(current.renameTo(renamed)) {
+            eventOutputStream = new BufferedOutputStream(new FileOutputStream(current, false));
+        } else {
+            throw new IOException("Failed to rotate event file");
+        }
 
-        eventOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
     }
 
     @Override
@@ -300,18 +292,18 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
         if (contextOutputStream != null) {
             contextOutputStream.close();
         }
-
-        // check if file size is empty if so dont rotate
-        if (getContextFile().length() == 0) {
+        File current = getContextFile();
+        if (current.length() == 0) {
+            contextOutputStream = new BufferedOutputStream(new FileOutputStream(current, true));
             return;
         }
-
-        File current = getContextFile();
         String newName = "contexts_data_" + System.currentTimeMillis() + ".bin";
         File renamed = new File(getDir(CONTEXT_DIR), newName);
-        current.renameTo(renamed);
-
-        contextOutputStream = new BufferedOutputStream(new FileOutputStream(current, false)); // Start new file
+        if(current.renameTo(renamed)) {
+            contextOutputStream = new BufferedOutputStream(new FileOutputStream(current, false));
+        } else {
+            throw new IOException("Failed to rotate context file");
+        }
     }
 
     @Override
@@ -336,7 +328,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
                 }
                 logBatchMap.put(file.getName(), builder.build());
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.e("Failed to parse logs from file: " + file.getAbsolutePath());
             }
         }
 
@@ -365,7 +357,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
                 }
                 eventBatchMap.put(file.getName(), builder.build());
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.e("Failed to parse events from file: " + file.getAbsolutePath());
             }
         }
 
@@ -394,7 +386,7 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
                 }
                 contextBatchMap.put(file.getName(), builder.build());
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.e("Failed to parse context from file: " + file.getAbsolutePath());
             }
         }
 
@@ -402,8 +394,22 @@ public class FileDatasourceImpl implements LocalDatasourceRepo {
     }
 
     // === Helper Methods ===
+
+    private List<File> getFilesFromDir(String subDir, String prefix, String mainFile) {
+        List<File> files = new ArrayList<>();
+        File[] allFiles = getDir(subDir).listFiles((dir, name) -> name.startsWith(prefix) && !name.equals(mainFile));
+        if (allFiles != null) {
+            Collections.addAll(files, allFiles);
+        }
+        return files;
+    }
+
     private File getDir(String subDir) {
-        return new File(new File(mContext.getFilesDir(), ROOT_DIR), subDir);
+        File dir = new File(new File(mContext.getFilesDir(), ROOT_DIR), subDir);
+        if (!dir.exists() && !dir.mkdirs()) {
+            logger.e("Failed to create directory: " + dir.getAbsolutePath());
+        }
+        return dir;
     }
 
     private File getLogFile() {

@@ -61,7 +61,7 @@ public class GrpcPlugin {
     private ContextModel contextModel;
     private boolean isNetworkAvailable = false;
     private final GrpcClientAsyncImpl grpcClientAsync;
-    private DeviceInfo deviceInfo;
+    private final DeviceInfo deviceInfo;
     private LocalDatasourceRepo localDatasourceRepo;
     private Logger logger;
 
@@ -95,7 +95,7 @@ public class GrpcPlugin {
                 defaultHandler.uncaughtException(thread, throwable);
             }
         });
-        localDatasourceRepo = FileDatasourceImpl.getInstance(context);
+        reinitializeDatasource();
         grpcClientAsync = new GrpcClientAsyncImpl(configuration.getHost(), configuration.getPort());
         if (context instanceof Application) {
             Application application = (Application) context;
@@ -103,6 +103,9 @@ public class GrpcPlugin {
         } else {
             logger.w( "Context is not an instance of Application. Activity lifecycle callbacks will not be registered.");
         }
+    }
+    private void reinitializeDatasource() {
+        localDatasourceRepo = FileDatasourceImpl.getInstance(context);
     }
 
     public static class Builder {
@@ -205,6 +208,9 @@ public class GrpcPlugin {
         Timestamp loggedTime = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();
         runOnLogThread(() -> {
             LogModel logModel = new LogModel(level, contextModel.getContextID(), message, stackTrace, loggedTime, logProperties);
+            if(localDatasourceRepo==null){
+                reinitializeDatasource();
+            }
             localDatasourceRepo.saveLog(logModel);
 
             if (logCounter.incrementAndGet() >= configuration.getBatchSize()) {
@@ -269,6 +275,9 @@ public class GrpcPlugin {
                     message,
                     customAttributes
             );
+            if(localDatasourceRepo==null){
+                reinitializeDatasource();
+            }
             localDatasourceRepo.saveEvent(eventModel);
 //            logger.d("logEventInternal: " + eventType + " " + displayName + " " + message);
 //
@@ -337,6 +346,10 @@ public class GrpcPlugin {
     protected void logContextInternal() {
         runOnLogThread(() -> {
             contextModel = new ContextModel(sessionId, configuration.getUserId(), configuration.getDeviceId(), EmulatorUtil.isEmulator() ? "Emulator" : "device", deviceInfo.getManufacturer(), deviceInfo.getCarrier(), deviceInfo.getBrand(), deviceInfo.getOsName(), deviceInfo.getOsVersion(), configuration.getAppId(), deviceInfo.getVersionName(), deviceInfo.getOsVersion(), sdkVersion, "en", IPUtil.getIPAddress(true), "", "", "", 0, 0);
+
+            if(localDatasourceRepo==null){
+                reinitializeDatasource();
+            }
             if (!isNetworkAvailable) {
                 localDatasourceRepo.saveContext(contextModel);
                 return;
@@ -376,6 +389,10 @@ public class GrpcPlugin {
     public void flushEvents() {
         runOnLogThread(() -> {
             try {
+                if(localDatasourceRepo==null){
+                    reinitializeDatasource();
+                }
+
                 if (localDatasourceRepo.getEventsCount() == 0) {
                     return;
                 }
@@ -439,6 +456,9 @@ public class GrpcPlugin {
     public void flushContext() {
        networkThread.post(()->{
            try {
+               if(localDatasourceRepo==null){
+                   reinitializeDatasource();
+               }
                localDatasourceRepo.rotateContextsFile();
            } catch (IOException e) {
                 logger.e("flushContext: " + e.getMessage());
@@ -475,7 +495,9 @@ public class GrpcPlugin {
     }
     public void flushLogs() {
         runOnLogThread(() -> {
-
+            if(localDatasourceRepo==null){
+                reinitializeDatasource();
+            }
             if (localDatasourceRepo.getLogsCount() == 0) {
                 return;
             }
