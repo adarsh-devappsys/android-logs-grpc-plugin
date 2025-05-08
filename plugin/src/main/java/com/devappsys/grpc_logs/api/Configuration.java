@@ -6,17 +6,17 @@ public class Configuration {
     private String deviceId;
     private String userId;
     private long batchSize;
-    private int appId;
+    private String appId;
 
-    public int getAppId() {
+    public String getAppId() {
         return appId;
     }
 
-    public void setAppId(int appId) {
+    public void setAppId(String appId) {
         this.appId = appId;
     }
 
-    public Configuration(String host, int port, String deviceId, int appId, String userId, long batchSize) {
+    public Configuration(String host, int port, String deviceId, String appId, String userId, long batchSize) {
         this.host = host;
         this.port = port;
         this.deviceId = deviceId;

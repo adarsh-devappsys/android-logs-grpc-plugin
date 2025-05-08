@@ -115,7 +115,7 @@ public class GrpcPlugin {
         private String host;
         private int port;
         private long batchSize;
-        private int appId;
+        private String appId;
 
         private boolean isDebug = true;
 
@@ -134,7 +134,7 @@ public class GrpcPlugin {
             return this;
         }
 
-        public synchronized Builder setAppId(int appId) {
+        public synchronized Builder setAppId(String appId) {
             this.appId = appId;
             return this;
         }
@@ -181,7 +181,7 @@ public class GrpcPlugin {
             if (instance != null) {
                 throw new IllegalStateException("GrpcPlugin is already initialized");
             }
-            if (appId <= 0) {
+            if (appId == null || appId.isEmpty()) {
                 throw new IllegalArgumentException("App ID must be greater than 0");
             }
             String sessionId = UUID.randomUUID().toString();

@@ -20,7 +20,7 @@ public class ContextModel {
     private String platform;
     private String osName;
     private String osVersion;
-    private int appId;
+    private String appId;
     private String appVersion;
     private String startVersion;
     private String sdkLibrary;
@@ -37,7 +37,7 @@ public class ContextModel {
     // Constructor
 
 
-    public ContextModel( String sessionId, String userID, String deviceID, String deviceType, String deviceFamily, String deviceCarrier, String platform, String osName, String osVersion, int appId, String appVersion, String startVersion, String sdkLibrary, String language, String ipAddress, String city, String region, String country, double latitude, double longitude) {
+    public ContextModel( String sessionId, String userID, String deviceID, String deviceType, String deviceFamily, String deviceCarrier, String platform, String osName, String osVersion, String appId, String appVersion, String startVersion, String sdkLibrary, String language, String ipAddress, String city, String region, String country, double latitude, double longitude) {
         this.contextID = UUID.randomUUID().toString();
         this.sessionId = sessionId;
         this.userID = userID;
@@ -171,11 +171,11 @@ public class ContextModel {
         this.osVersion = osVersion;
     }
 
-    public int getAppId() {
+    public String getAppId() {
         return appId;
     }
 
-    public void setAppId(int appId) {
+    public void setAppId(String appId) {
         this.appId = appId;
     }
 
