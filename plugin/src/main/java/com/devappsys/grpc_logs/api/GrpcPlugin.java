@@ -67,9 +67,11 @@ public class GrpcPlugin {
 
     private GrpcPlugin(Context context, String sessionId, Configuration configuration) {
         this.context = context.getApplicationContext();
+        reinitializeDatasource();
         this.sessionId = sessionId;
         this.configuration = configuration;
         this.deviceInfo = new DeviceInfo(context);
+        grpcClientAsync = new GrpcClientAsyncImpl(configuration.getHost(), configuration.getPort());
         contextModel = new ContextModel(sessionId, configuration.getUserId(), configuration.getDeviceId(), EmulatorUtil.isEmulator() ? "Emulator" : "device", deviceInfo.getManufacturer(), deviceInfo.getCarrier(), deviceInfo.getBrand(), deviceInfo.getOsName(), deviceInfo.getOsVersion(), configuration.getAppId(), deviceInfo.getVersionName(), deviceInfo.getOsVersion(), sdkVersion, "en", IPUtil.getIPAddress(true), "", "", "", 0, 0);
         logThread.start();
         networkThread.start();
@@ -95,8 +97,8 @@ public class GrpcPlugin {
                 defaultHandler.uncaughtException(thread, throwable);
             }
         });
-        reinitializeDatasource();
-        grpcClientAsync = new GrpcClientAsyncImpl(configuration.getHost(), configuration.getPort());
+
+
         if (context instanceof Application) {
             Application application = (Application) context;
             application.registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks());
@@ -245,17 +247,19 @@ public class GrpcPlugin {
 
                                     @Override
                                     public void onError(Throwable t) {
+                                        logsUploading.set(false);
                                         t.printStackTrace(); // Optional retry logic here
                                     }
 
                                     @Override
                                     public void onCompleted() {
+                                        logsUploading.set(false);
                                         localDatasourceRepo.deleteLogsFile(fileName);
                                     }
                                 });
                             }
                         } finally {
-                            logsUploading.set(false);
+
                         }
                     });
                 }
@@ -324,18 +328,19 @@ public class GrpcPlugin {
 
                                     @Override
                                     public void onError(Throwable t) {
+                                        eventsUploading.set(false);
                                         t.printStackTrace(); // Optional: Add retry/backoff
                                     }
 
                                     @Override
                                     public void onCompleted() {
+                                        eventsUploading.set(false);
                                         localDatasourceRepo.deleteEventsFile(fileName);
                                     }
                                 });
                             }
 
                         } finally {
-                            eventsUploading.set(false);
                         }
                     });
                 }
@@ -364,15 +369,16 @@ public class GrpcPlugin {
 
                             @Override
                             public void onError(Throwable t) {
+                                contextUploading.set(false);
                                 t.printStackTrace();
                             }
 
                             @Override
                             public void onCompleted() {
+                                contextUploading.set(false);
                             }
                         });
                     } finally {
-                        contextUploading.set(false);
                     }
                 });
             }
@@ -435,18 +441,19 @@ public class GrpcPlugin {
 
                                 @Override
                                 public void onError(Throwable t) {
+                                    eventsUploading.set(false);
                                     t.printStackTrace(); // Optional: Add retry/backoff
                                 }
 
                                 @Override
                                 public void onCompleted() {
+                                    eventsUploading.set(false);
                                     localDatasourceRepo.deleteEventsFile(fileName);
                                 }
                             });
                         }
 
                     } finally {
-                        eventsUploading.set(false);
                     }
                 });
             }
@@ -530,17 +537,18 @@ public class GrpcPlugin {
 
                                 @Override
                                 public void onError(Throwable t) {
+                                    logsUploading.set(false);
                                     t.printStackTrace();
                                 }
 
                                 @Override
                                 public void onCompleted() {
+                                    logsUploading.set(false);
                                     localDatasourceRepo.deleteLogsFile(fileName);
                                 }
                             });
                         }
                     } finally {
-                        logsUploading.set(false);
                     }
                 });
             }

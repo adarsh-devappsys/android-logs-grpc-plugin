@@ -1,6 +1,7 @@
 package com.devappsys.grpc_logs.api.data_models;
 
 import com.devappsys.log.Context;
+import com.google.protobuf.Timestamp;
 
 import java.util.UUID;
 
@@ -33,7 +34,7 @@ public class ContextModel {
     private String country;
     private double latitude;
     private double longitude;
-
+private Timestamp timestamp;
     // Constructor
 
 
@@ -59,6 +60,7 @@ public class ContextModel {
         this.country = country;
         this.latitude = latitude;
         this.longitude = longitude;
+        this.timestamp = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build();
     }
 
     // Method to convert ContextModel to Protobuf Context
@@ -86,6 +88,7 @@ public class ContextModel {
                 .setCountry(country)
                 .setLocationLat(latitude)
                 .setLocationLng(longitude)
+                .setEventTime(timestamp)
                 .build();
     }
 
