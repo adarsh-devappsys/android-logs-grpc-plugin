@@ -13,6 +13,7 @@ message EventMessage {
   string message = 5;
   google.protobuf.Timestamp eventTime = 6;
   map<string, string>  event_properties = 7;
+  string platform_id = 8;
 }
 
 message EventBatch{

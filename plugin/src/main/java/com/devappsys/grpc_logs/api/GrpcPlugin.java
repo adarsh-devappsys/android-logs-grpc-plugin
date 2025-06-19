@@ -243,6 +243,9 @@ public class GrpcPlugin {
                                 grpcClientAsync.uploadLogs(entry.getValue(), new StreamObserver<>() {
                                     @Override
                                     public void onNext(Common.UploadResponse value) {
+                                        if (value.getSuccess()) {
+                                            localDatasourceRepo.deleteLogsFile(fileName);
+                                        }
                                     }
 
                                     @Override
@@ -254,7 +257,6 @@ public class GrpcPlugin {
                                     @Override
                                     public void onCompleted() {
                                         logsUploading.set(false);
-                                        localDatasourceRepo.deleteLogsFile(fileName);
                                     }
                                 });
                             }
@@ -277,6 +279,7 @@ public class GrpcPlugin {
                     eventTime,
                     displayName,
                     message,
+                    configuration.getPlatformId(),
                     customAttributes
             );
             if(localDatasourceRepo==null){
@@ -324,6 +327,9 @@ public class GrpcPlugin {
                                 grpcClientAsync.uploadEvents(entry.getValue(), new StreamObserver<>() {
                                     @Override
                                     public void onNext(Common.UploadResponse value) {
+                                        if(value.getSuccess()){
+                                            localDatasourceRepo.deleteEventsFile(fileName);
+                                        }
                                     }
 
                                     @Override
@@ -335,7 +341,6 @@ public class GrpcPlugin {
                                     @Override
                                     public void onCompleted() {
                                         eventsUploading.set(false);
-                                        localDatasourceRepo.deleteEventsFile(fileName);
                                     }
                                 });
                             }
@@ -437,6 +442,9 @@ public class GrpcPlugin {
                             grpcClientAsync.uploadEvents(entry.getValue(), new StreamObserver<>() {
                                 @Override
                                 public void onNext(Common.UploadResponse value) {
+                                    if(value.getSuccess()){
+                                        localDatasourceRepo.deleteEventsFile(fileName);
+                                    }
                                 }
 
                                 @Override
@@ -448,7 +456,6 @@ public class GrpcPlugin {
                                 @Override
                                 public void onCompleted() {
                                     eventsUploading.set(false);
-                                    localDatasourceRepo.deleteEventsFile(fileName);
                                 }
                             });
                         }
@@ -485,6 +492,9 @@ public class GrpcPlugin {
                     grpcClientAsync.uploadContexts(entry.getValue(), new StreamObserver<>() {
                         @Override
                         public void onNext(Common.UploadResponse value) {
+                            if(value.getSuccess()){
+                                localDatasourceRepo.deleteContextsFile(fileName);
+                            }
                         }
 
                         @Override
@@ -494,7 +504,6 @@ public class GrpcPlugin {
 
                         @Override
                         public void onCompleted() {
-                            localDatasourceRepo.deleteContextsFile(fileName);
                         }
                     });
                 }
@@ -533,6 +542,9 @@ public class GrpcPlugin {
                             grpcClientAsync.uploadLogs(entry.getValue(), new StreamObserver<>() {
                                 @Override
                                 public void onNext(Common.UploadResponse value) {
+                                    if(value.getSuccess()){
+                                        localDatasourceRepo.deleteLogsFile(fileName);
+                                    }
                                 }
 
                                 @Override
@@ -544,7 +556,6 @@ public class GrpcPlugin {
                                 @Override
                                 public void onCompleted() {
                                     logsUploading.set(false);
-                                    localDatasourceRepo.deleteLogsFile(fileName);
                                 }
                             });
                         }

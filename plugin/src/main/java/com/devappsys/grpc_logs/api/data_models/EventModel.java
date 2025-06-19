@@ -16,15 +16,18 @@ public class EventModel {
     private String message;
     private Map<String, Object> customAttributes;
 
+    private String platformId;
+
     // Constructor
 
-    public EventModel( String contextID, String eventType, Timestamp eventTime, String displayName, String message, Map<String, Object> customAttributes) {
+    public EventModel( String contextID, String eventType, Timestamp eventTime, String displayName, String message, String platformId, Map<String, Object> customAttributes) {
         this.eventID = UUID.randomUUID().toString();
         this.contextID = contextID;
         this.eventType = eventType;
         this.eventTime = eventTime;
         this.displayName = displayName;
         this.message = message;
+        this.platformId = platformId;
         this.customAttributes = customAttributes;
     }
 
@@ -38,6 +41,7 @@ public class EventModel {
                 .setDisplayName(displayName)
                 .setMessage(message)
                 .setEventTime(eventTime)
+                .setPlatformId(platformId)
                 .putAllEventProperties(getCustomAttributesToMap());
 
         return eventMessageBuilder.build();

@@ -7,6 +7,7 @@ public class Configuration {
     private String userId;
     private long batchSize;
     private String appId;
+    private String platformId;
 
     public String getAppId() {
         return appId;
@@ -59,6 +60,14 @@ public class Configuration {
 
     public long getBatchSize() {
         return batchSize;
+    }
+
+    public String getPlatformId() {
+        return platformId;
+    }
+
+    public void setPlatformId(String platformId) {
+        this.platformId = platformId;
     }
 
     public void setBatchSize(long batchSize) {
